@@ -1,0 +1,40 @@
+{
+  "name": "@shaenchen/custom-type-enforcement",
+  "version": "1.0.0",
+  "description": "Enforce TypeScript type architecture and code quality rules",
+  "main": "dist/cli/index.js",
+  "bin": {
+    "custom-type-enforcement": "./dist/cli/index.js",
+    "cte": "./dist/cli/index.js"
+  },
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "keywords": [
+    "typescript",
+    "type-enforcement",
+    "code-quality",
+    "linting",
+    "static-analysis"
+  ],
+  "author": "Steve Haenchen",
+  "license": "MIT",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.8",
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.4"
+  }
+}
