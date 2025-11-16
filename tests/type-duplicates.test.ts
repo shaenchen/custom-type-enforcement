@@ -50,7 +50,6 @@ describe('Type Duplicates Check', () => {
   it('should detect exact structural matches', () => {
     const testDir = path.join(fixturesDir, 'type-duplicates');
     const result = runTypeDuplicatesCheck({
-      format: 'compact',
       noExit: true,
       projectRoot: testDir,
     });
@@ -59,12 +58,14 @@ describe('Type Duplicates Check', () => {
     expect(result?.passed).toBe(false);
     expect(result?.violationCount).toBeGreaterThan(0);
     expect(result?.exitCode).toBe(1);
+    expect(result?.violations).toBeDefined();
+    expect(result?.howToFix).toBeDefined();
+    expect(result?.suppressInstruction).toBeDefined();
   });
 
   it('should detect subset relationships', () => {
     const testDir = path.join(fixturesDir, 'type-duplicates-subset');
     const result = runTypeDuplicatesCheck({
-      format: 'compact',
       noExit: true,
       projectRoot: testDir,
     });
@@ -77,7 +78,6 @@ describe('Type Duplicates Check', () => {
   it('should detect optional field variance', () => {
     const testDir = path.join(fixturesDir, 'type-duplicates-optional');
     const result = runTypeDuplicatesCheck({
-      format: 'compact',
       noExit: true,
       projectRoot: testDir,
     });
@@ -90,7 +90,6 @@ describe('Type Duplicates Check', () => {
   it('should detect Required<T> opportunities', () => {
     const testDir = path.join(fixturesDir, 'type-duplicates-required');
     const result = runTypeDuplicatesCheck({
-      format: 'compact',
       noExit: true,
       projectRoot: testDir,
     });
@@ -103,7 +102,6 @@ describe('Type Duplicates Check', () => {
   it('should ignore duplicates in same file', () => {
     const testDir = path.join(fixturesDir, 'type-duplicates-same-file');
     const result = runTypeDuplicatesCheck({
-      format: 'compact',
       noExit: true,
       projectRoot: testDir,
     });
@@ -117,7 +115,6 @@ describe('Type Duplicates Check', () => {
   it('should ignore types with fewer than 2 fields', () => {
     const testDir = path.join(fixturesDir, 'type-duplicates-small');
     const result = runTypeDuplicatesCheck({
-      format: 'compact',
       noExit: true,
       projectRoot: testDir,
     });
@@ -128,16 +125,15 @@ describe('Type Duplicates Check', () => {
     expect(result?.violationCount).toBe(0);
   });
 
-  it('should respect @type-scan-ignore comments', () => {
+  it('should respect @type-duplicate-allowed comments', () => {
     const testDir = path.join(fixturesDir, 'type-duplicates-ignore');
     const result = runTypeDuplicatesCheck({
-      format: 'compact',
       noExit: true,
       projectRoot: testDir,
     });
 
     expect(result).toBeDefined();
-    // Types with @type-scan-ignore should be skipped
+    // Types with @type-duplicate-allowed should be skipped
     expect(result?.passed).toBe(true);
     expect(result?.violationCount).toBe(0);
   });
@@ -145,7 +141,6 @@ describe('Type Duplicates Check', () => {
   it('should pass when no types are present', () => {
     const testDir = path.join(fixturesDir, 'type-duplicates-no-types');
     const result = runTypeDuplicatesCheck({
-      format: 'compact',
       noExit: true,
       projectRoot: testDir,
     });
@@ -159,7 +154,6 @@ describe('Type Duplicates Check', () => {
   it('should work with structured format', () => {
     const testDir = path.join(fixturesDir, 'type-duplicates');
     const result = runTypeDuplicatesCheck({
-      format: 'structured',
       noExit: true,
       projectRoot: testDir,
     });
@@ -171,7 +165,6 @@ describe('Type Duplicates Check', () => {
   it('should return proper CheckResult structure', () => {
     const testDir = path.join(fixturesDir, 'type-duplicates-no-types');
     const result = runTypeDuplicatesCheck({
-      format: 'compact',
       noExit: true,
       projectRoot: testDir,
     });

@@ -120,7 +120,7 @@ function scanForBarrelFiles(files: string[]): Violation[] {
  * @returns CheckResult if noExit is true, otherwise exits the process
  */
 export function runBarrelFilesCheck(options: CheckOptions = {}): CheckResult | void {
-  const formatter = new Formatter('Barrel Files', { format: options.format });
+  const formatter = new Formatter('Barrel Files');
   formatter.start();
 
   // Get all TypeScript files
@@ -161,6 +161,17 @@ export function runBarrelFilesCheck(options: CheckOptions = {}): CheckResult | v
       passed: exitCode === 0,
       violationCount: formatter.getViolationCount(),
       exitCode,
+      violations: formatter.getViolations().map(v => ({
+        file: v.file,
+        line: v.line,
+        message: v.message ?? v.type ?? 'Violation detected',
+      })),
+      howToFix: [
+        'Add actual implementation code to files with re-exports',
+        'Import directly from source files instead of through barrel files',
+        'Consider consolidating related functionality into fewer, more meaningful modules',
+      ],
+      suppressInstruction: 'To suppress: Add // @barrel-file-allowed comment anywhere in file',
     };
   }
 }

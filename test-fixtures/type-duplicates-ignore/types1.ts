@@ -1,4 +1,4 @@
-// @type-scan-ignore
+// @type-duplicate-allowed
 export interface User {
   id: string;
   name: string;

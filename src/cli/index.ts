@@ -6,7 +6,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import type { CheckName, CheckResult, CheckRunner, ParsedArgs, OutputFormat } from '../types.js';
+import type { CheckName, CheckResult, CheckRunner, ParsedArgs } from '../types.js';
 import { runBarrelFilesCheck } from '../checks/barrel-files.js';
 import { runTypeExportsCheck } from '../checks/type-exports.js';
 import { runTypeImportsCheck } from '../checks/type-imports.js';
@@ -52,15 +52,11 @@ Options:
                                     type-duplicates, inline-types
                           Default: all checks
 
-  --format=<format>       Output format
-                          Options: structured (default), compact
-
   --help                  Show this help message
 
 Examples:
   npx custom-type-enforcement
   npx custom-type-enforcement --checks=barrel-files,type-exports
-  npx custom-type-enforcement --format=compact
 
 Documentation: https://github.com/shaenchen/custom-type-enforcement
 `);
@@ -72,33 +68,24 @@ Documentation: https://github.com/shaenchen/custom-type-enforcement
 function parseArgs(): ParsedArgs {
   const args = process.argv.slice(2);
   let checks: CheckName[] = ALL_CHECKS;
-  let format: OutputFormat = 'structured';
   let help = false;
 
   for (const arg of args) {
     if (arg === '--help' || arg === '-h') {
       help = true;
     } else if (arg.startsWith('--checks=')) {
-      const checksArg = arg.substring('--checks='.length);
+      const checksArg = arg.replace('--checks=', '');
       const requestedChecks = checksArg.split(',').map(c => c.trim()) as CheckName[];
 
-      // Validate check names
+      // Validate checks
       const invalidChecks = requestedChecks.filter(c => !ALL_CHECKS.includes(c));
       if (invalidChecks.length > 0) {
-        console.error(`❌ ERROR: Invalid check names: ${invalidChecks.join(', ')}\n`);
+        console.error(`❌ ERROR: Invalid check(s): ${invalidChecks.join(', ')}\n`);
         console.error(`Available checks: ${ALL_CHECKS.join(', ')}\n`);
         process.exit(1);
       }
 
       checks = requestedChecks;
-    } else if (arg.startsWith('--format=')) {
-      const formatArg = arg.substring('--format='.length);
-      if (formatArg !== 'structured' && formatArg !== 'compact') {
-        console.error(`❌ ERROR: Invalid format: ${formatArg}\n`);
-        console.error('Available formats: structured, compact\n');
-        process.exit(1);
-      }
-      format = formatArg;
     } else {
       console.error(`❌ ERROR: Unknown argument: ${arg}\n`);
       console.error('Use --help to see available options\n');
@@ -106,7 +93,7 @@ function parseArgs(): ParsedArgs {
     }
   }
 
-  return { checks, format, help };
+  return { checks, help };
 }
 
 /**
@@ -124,51 +111,23 @@ function checkTsConfigExists(): void {
 }
 
 /**
- * Run checks and aggregate results
+ * Run checks and aggregate results with minimal LLM-optimized output
  */
-function runChecks(checks: CheckName[], format: OutputFormat): void {
+function runChecks(checks: CheckName[]): void {
   const results: CheckResult[] = [];
 
   // Run each check with noExit option
   for (const checkName of checks) {
     const runCheck = CHECK_RUNNERS[checkName];
-    const result = runCheck({ format, noExit: true });
+    const result = runCheck({ noExit: true });
 
     if (result) {
       results.push(result);
     }
   }
 
-  // Print summary
-  console.log('\n' + '='.repeat(65));
-  console.log('📊 SUMMARY');
-  console.log('='.repeat(65));
-  console.log('');
-
-  let totalViolations = 0;
-  let failedChecks = 0;
-  let passedChecks = 0;
-
-  results.forEach((result) => {
-    const status = result.passed ? '✅ PASSED' : '❌ FAILED';
-    const violations = result.violationCount > 0
-      ? ` (${result.violationCount} issue${result.violationCount === 1 ? '' : 's'})`
-      : '';
-
-    console.log(`  ${result.checkName.padEnd(20)} ${status}${violations}`);
-
-    totalViolations += result.violationCount;
-    if (result.passed) {
-      passedChecks++;
-    } else {
-      failedChecks++;
-    }
-  });
-
-  console.log('');
-  console.log(`Total: ${passedChecks} passed, ${failedChecks} failed, ${totalViolations} violation${totalViolations === 1 ? '' : 's'}`);
-  console.log('='.repeat(65));
-  console.log('');
+  // Print minimal LLM-optimized output
+  printMinimalOutput(results);
 
   // Exit with appropriate code
   const hasFailures = results.some(r => !r.passed);
@@ -176,10 +135,52 @@ function runChecks(checks: CheckName[], format: OutputFormat): void {
 }
 
 /**
+ * Print minimal LLM-optimized output format
+ */
+function printMinimalOutput(results: CheckResult[]): void {
+  const failedChecks = results.filter(r => !r.passed);
+  const totalViolations = results.reduce((sum, r) => sum + r.violationCount, 0);
+
+  // Success case: single line
+  if (failedChecks.length === 0) {
+    console.log('✓ All checks passed');
+    return;
+  }
+
+  // Failure case: summary + violations + fixes
+  const checkWord = failedChecks.length === 1 ? 'check' : 'checks';
+  const violationWord = totalViolations === 1 ? 'violation' : 'violations';
+  console.log(`✗ ${failedChecks.length} ${checkWord} failed (${totalViolations} ${violationWord})`);
+  console.log('');
+
+  // Print each failed check's violations and fix
+  failedChecks.forEach((result) => {
+    // Print violations
+    console.log(`${result.checkName} (${result.violationCount}):`);
+    result.violations.forEach((violation) => {
+      const location = violation.line
+        ? `${violation.file}:${violation.line}`
+        : violation.file;
+      console.log(`  ${location}: ${violation.message}`);
+    });
+    console.log('');
+
+    // Print fix instructions
+    console.log('Fix: ' + result.howToFix[0]);
+    result.howToFix.slice(1).forEach((fix) => {
+      console.log('     ' + fix);
+    });
+    // Add suppress instruction as last line
+    console.log('     ' + result.suppressInstruction);
+    console.log('');
+  });
+}
+
+/**
  * Main CLI function
  */
 function main(): void {
-  const { checks, format, help } = parseArgs();
+  const { checks, help } = parseArgs();
 
   if (help) {
     showHelp();
@@ -190,7 +191,7 @@ function main(): void {
   checkTsConfigExists();
 
   // Run checks
-  runChecks(checks, format);
+  runChecks(checks);
 }
 
 // Run CLI

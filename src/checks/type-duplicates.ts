@@ -32,16 +32,16 @@ function extractTypeDefinitions(filePath: string): TypeDefinition[] {
   const lines = content.split('\n');
   const definitions: TypeDefinition[] = [];
 
-  // Check for @type-scan-ignore at file level
-  if (content.includes('// @type-scan-ignore')) {
+  // Check for @type-duplicate-allowed at file level
+  if (content.includes('// @type-duplicate-allowed')) {
     return definitions;
   }
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Skip lines with @type-scan-ignore comment
-    if (line.includes('// @type-scan-ignore')) {
+    // Skip lines with @type-duplicate-allowed comment
+    if (line.includes('// @type-duplicate-allowed')) {
       continue;
     }
 
@@ -355,7 +355,7 @@ function checkRequiredOpportunity(
  * @returns CheckResult if noExit is true, otherwise exits the process
  */
 export function runTypeDuplicatesCheck(options: CheckOptions = {}): CheckResult | void {
-  const formatter = new Formatter('Type Duplicates', { format: options.format });
+  const formatter = new Formatter('Type Duplicates');
   formatter.start();
 
   // Get all TypeScript files
@@ -379,6 +379,14 @@ export function runTypeDuplicatesCheck(options: CheckOptions = {}): CheckResult 
         passed: true,
         violationCount: 0,
         exitCode,
+        violations: [],
+        howToFix: [
+          'Consolidate exact duplicates into a single type',
+          'Use type composition utilities: Pick<T, K>, Omit<T, K>, Required<T>, Partial<T>',
+          'For subset relationships, derive smaller types from larger ones',
+          'Co-locate related types in the same types.ts file',
+        ],
+        suppressInstruction: 'To suppress: Add // @type-duplicate-allowed comment on same line or line above',
       };
     }
     return;
@@ -448,7 +456,7 @@ export function runTypeDuplicatesCheck(options: CheckOptions = {}): CheckResult 
         'Consolidate exact duplicates into a single type',
         'Use type composition utilities: Pick<T, K>, Omit<T, K>, Required<T>, Partial<T>',
         'For subset relationships, derive smaller types from larger ones',
-        'Add // @type-scan-ignore to suppress false positives',
+        'Add // @type-duplicate-allowed to suppress false positives',
         'Co-locate related types in the same types.ts file',
       ],
     });
@@ -472,6 +480,18 @@ export function runTypeDuplicatesCheck(options: CheckOptions = {}): CheckResult 
       passed: exitCode === 0,
       violationCount: formatter.getViolationCount(),
       exitCode,
+      violations: formatter.getViolations().map(v => ({
+        file: v.file,
+        line: v.line,
+        message: v.message ?? 'Violation detected',
+      })),
+      howToFix: [
+        'Consolidate exact duplicates into a single type',
+        'Use type composition utilities: Pick<T, K>, Omit<T, K>, Required<T>, Partial<T>',
+        'For subset relationships, derive smaller types from larger ones',
+        'Co-locate related types in the same types.ts file',
+      ],
+      suppressInstruction: 'To suppress: Add // @type-duplicate-allowed comment on same line or line above',
     };
   }
 }

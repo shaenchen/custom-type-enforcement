@@ -23,9 +23,9 @@ function detectInlineTypes(filePath: string): InlineTypeViolation[] {
     const line = lines[i];
     const trimmedLine = line.trim();
 
-    // Skip lines with @inline-type-ok comment (same line or previous line)
+    // Skip lines with @inline-type-allowed comment (same line or previous line)
     const prevLine = i > 0 ? lines[i - 1] : '';
-    if (line.includes('// @inline-type-ok') || prevLine.includes('// @inline-type-ok')) {
+    if (line.includes('// @inline-type-allowed') || prevLine.includes('// @inline-type-allowed')) {
       continue;
     }
 
@@ -148,7 +148,7 @@ function detectInlineTypes(filePath: string): InlineTypeViolation[] {
  * @returns CheckResult if noExit is true, otherwise exits the process
  */
 export function runInlineTypesCheck(options: CheckOptions = {}): CheckResult | void {
-  const formatter = new Formatter('Inline Types', { format: options.format });
+  const formatter = new Formatter('Inline Types');
   formatter.start();
 
   // Get all TypeScript files
@@ -172,6 +172,14 @@ export function runInlineTypesCheck(options: CheckOptions = {}): CheckResult | v
         passed: true,
         violationCount: 0,
         exitCode,
+        violations: [],
+        howToFix: [
+          'Extract inline types to named type aliases or interfaces',
+          'Define types in appropriate types.ts files',
+          'Use descriptive type names that explain the purpose',
+          'For generic constraints and mapped types, inline is acceptable',
+        ],
+        suppressInstruction: 'To suppress: Add // @inline-type-allowed comment on same line or line above',
       };
     }
     return;
@@ -213,7 +221,7 @@ export function runInlineTypesCheck(options: CheckOptions = {}): CheckResult | v
         'Extract inline types to named type aliases or interfaces',
         'Define types in appropriate types.ts files',
         'Use descriptive type names that explain the purpose',
-        'Add // @inline-type-ok comment for legitimate inline types',
+        'Add // @inline-type-allowed comment for legitimate inline types',
         'For generic constraints and mapped types, inline is acceptable',
       ],
     });
@@ -237,6 +245,18 @@ export function runInlineTypesCheck(options: CheckOptions = {}): CheckResult | v
       passed: exitCode === 0,
       violationCount: formatter.getViolationCount(),
       exitCode,
+      violations: formatter.getViolations().map(v => ({
+        file: v.file,
+        line: v.line,
+        message: v.message ?? 'Violation detected',
+      })),
+      howToFix: [
+        'Extract inline types to named type aliases or interfaces',
+        'Define types in appropriate types.ts files',
+        'Use descriptive type names that explain the purpose',
+        'For generic constraints and mapped types, inline is acceptable',
+      ],
+      suppressInstruction: 'To suppress: Add // @inline-type-allowed comment on same line or line above',
     };
   }
 }

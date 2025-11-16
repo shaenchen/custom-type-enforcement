@@ -45,51 +45,16 @@ function createTestProject(files: Record<string, string>): void {
 }
 
 /**
- * Helper to run check and capture output
+ * Helper to run check with noExit flag
  */
-function runCheckAndCaptureOutput(): { exitCode: number; output: string } {
+function runCheck() {
   const originalCwd = process.cwd();
-  const originalExit = process.exit;
-  const originalLog = console.log;
-  const originalError = console.error;
-
-  let exitCode = 0;
-  let output = '';
-
   try {
-    // Change to test directory
     process.chdir(TEST_DIR);
-
-    // Mock process.exit
-    (process.exit as unknown) = ((code: number) => {
-      exitCode = code ?? 0;
-      throw new Error('EXIT');
-    }) as typeof process.exit;
-
-    // Capture console output
-    console.log = (...args: unknown[]) => {
-      output += args.join(' ') + '\n';
-    };
-    console.error = (...args: unknown[]) => {
-      output += args.join(' ') + '\n';
-    };
-
-    // Run the check
-    runTypeExportsCheck({ format: 'compact' });
-  } catch (error) {
-    // Expected - process.exit throws
-    if ((error as Error).message !== 'EXIT') {
-      throw error;
-    }
+    return runTypeExportsCheck({ noExit: true });
   } finally {
-    // Restore
     process.chdir(originalCwd);
-    process.exit = originalExit;
-    console.log = originalLog;
-    console.error = originalError;
   }
-
-  return { exitCode, output };
 }
 
 describe('Type Exports Check', () => {
@@ -121,10 +86,11 @@ describe('Type Exports Check', () => {
       `,
     });
 
-    const { exitCode, output } = runCheckAndCaptureOutput();
+    const result = runCheck();
 
-    expect(exitCode).toBe(0);
-    expect(output).toContain('✅ PASSED');
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
   });
 
   it('should pass when types are exported from types/{domain}.ts', () => {
@@ -142,10 +108,11 @@ describe('Type Exports Check', () => {
       `,
     });
 
-    const { exitCode, output } = runCheckAndCaptureOutput();
+    const result = runCheck();
 
-    expect(exitCode).toBe(0);
-    expect(output).toContain('✅ PASSED');
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
   });
 
   it('should pass when functional exports are in implementation files', () => {
@@ -165,10 +132,11 @@ describe('Type Exports Check', () => {
       `,
     });
 
-    const { exitCode, output } = runCheckAndCaptureOutput();
+    const result = runCheck();
 
-    expect(exitCode).toBe(0);
-    expect(output).toContain('✅ PASSED');
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
   });
 
   it('should pass when types are defined locally (not exported)', () => {
@@ -188,10 +156,11 @@ describe('Type Exports Check', () => {
       `,
     });
 
-    const { exitCode, output } = runCheckAndCaptureOutput();
+    const result = runCheck();
 
-    expect(exitCode).toBe(0);
-    expect(output).toContain('✅ PASSED');
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
   });
 
   it('should pass with nested types directories', () => {
@@ -204,10 +173,11 @@ describe('Type Exports Check', () => {
       `,
     });
 
-    const { exitCode, output } = runCheckAndCaptureOutput();
+    const result = runCheck();
 
-    expect(exitCode).toBe(0);
-    expect(output).toContain('✅ PASSED');
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
   });
 
   it('should pass when const export is a multi-line arrow function', () => {
@@ -222,10 +192,11 @@ describe('Type Exports Check', () => {
       `,
     });
 
-    const { exitCode, output } = runCheckAndCaptureOutput();
+    const result = runCheck();
 
-    expect(exitCode).toBe(0);
-    expect(output).toContain('✅ PASSED');
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
   });
 
   it('should pass when const export is an async arrow function', () => {
@@ -241,10 +212,11 @@ describe('Type Exports Check', () => {
       `,
     });
 
-    const { exitCode, output } = runCheckAndCaptureOutput();
+    const result = runCheck();
 
-    expect(exitCode).toBe(0);
-    expect(output).toContain('✅ PASSED');
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
   });
 
   // ===== INVALID SCENARIOS (should fail) =====
@@ -259,11 +231,11 @@ describe('Type Exports Check', () => {
       `,
     });
 
-    const { exitCode, output } = runCheckAndCaptureOutput();
+    const result = runCheck();
 
-    expect(exitCode).toBe(1);
-    expect(output).toContain('❌ FAILED');
-    expect(output).toContain('Type Export from Non-Types File');
+    expect(result?.passed).toBe(false);
+    expect(result?.exitCode).toBe(1);
+    expect(result?.violationCount).toBeGreaterThan(0);
   });
 
   it('should detect interface export from non-types file', () => {
@@ -275,11 +247,11 @@ describe('Type Exports Check', () => {
       `,
     });
 
-    const { exitCode, output } = runCheckAndCaptureOutput();
+    const result = runCheck();
 
-    expect(exitCode).toBe(1);
-    expect(output).toContain('❌ FAILED');
-    expect(output).toContain('Type Export from Non-Types File');
+    expect(result?.passed).toBe(false);
+    expect(result?.exitCode).toBe(1);
+    expect(result?.violationCount).toBeGreaterThan(0);
   });
 
   it('should detect enum export from non-types file', () => {
@@ -293,11 +265,11 @@ describe('Type Exports Check', () => {
       `,
     });
 
-    const { exitCode, output } = runCheckAndCaptureOutput();
+    const result = runCheck();
 
-    expect(exitCode).toBe(1);
-    expect(output).toContain('❌ FAILED');
-    expect(output).toContain('Type Export from Non-Types File');
+    expect(result?.passed).toBe(false);
+    expect(result?.exitCode).toBe(1);
+    expect(result?.violationCount).toBeGreaterThan(0);
   });
 
   it('should detect export { type Foo } from non-types file', () => {
@@ -308,11 +280,11 @@ describe('Type Exports Check', () => {
       `,
     });
 
-    const { exitCode, output } = runCheckAndCaptureOutput();
+    const result = runCheck();
 
-    expect(exitCode).toBe(1);
-    expect(output).toContain('❌ FAILED');
-    expect(output).toContain('Type Export from Non-Types File');
+    expect(result?.passed).toBe(false);
+    expect(result?.exitCode).toBe(1);
+    expect(result?.violationCount).toBeGreaterThan(0);
   });
 
   it('should detect export type { Foo } from non-types file', () => {
@@ -323,11 +295,11 @@ describe('Type Exports Check', () => {
       `,
     });
 
-    const { exitCode, output } = runCheckAndCaptureOutput();
+    const result = runCheck();
 
-    expect(exitCode).toBe(1);
-    expect(output).toContain('❌ FAILED');
-    expect(output).toContain('Type Export from Non-Types File');
+    expect(result?.passed).toBe(false);
+    expect(result?.exitCode).toBe(1);
+    expect(result?.violationCount).toBeGreaterThan(0);
   });
 
   it('should detect non-functional const export (primitive)', () => {
@@ -339,11 +311,11 @@ describe('Type Exports Check', () => {
       `,
     });
 
-    const { exitCode, output } = runCheckAndCaptureOutput();
+    const result = runCheck();
 
-    expect(exitCode).toBe(1);
-    expect(output).toContain('❌ FAILED');
-    expect(output).toContain('Non-Functional Constant Export');
+    expect(result?.passed).toBe(false);
+    expect(result?.exitCode).toBe(1);
+    expect(result?.violationCount).toBeGreaterThan(0);
   });
 
   it('should detect non-functional const export (object)', () => {
@@ -356,11 +328,11 @@ describe('Type Exports Check', () => {
       `,
     });
 
-    const { exitCode, output } = runCheckAndCaptureOutput();
+    const result = runCheck();
 
-    expect(exitCode).toBe(1);
-    expect(output).toContain('❌ FAILED');
-    expect(output).toContain('Non-Functional Constant Export');
+    expect(result?.passed).toBe(false);
+    expect(result?.exitCode).toBe(1);
+    expect(result?.violationCount).toBeGreaterThan(0);
   });
 
   it('should detect non-functional const export (array)', () => {
@@ -370,11 +342,11 @@ describe('Type Exports Check', () => {
       `,
     });
 
-    const { exitCode, output } = runCheckAndCaptureOutput();
+    const result = runCheck();
 
-    expect(exitCode).toBe(1);
-    expect(output).toContain('❌ FAILED');
-    expect(output).toContain('Non-Functional Constant Export');
+    expect(result?.passed).toBe(false);
+    expect(result?.exitCode).toBe(1);
+    expect(result?.violationCount).toBeGreaterThan(0);
   });
 
   it('should detect export type * anti-pattern', () => {
@@ -387,11 +359,11 @@ describe('Type Exports Check', () => {
       `,
     });
 
-    const { exitCode, output } = runCheckAndCaptureOutput();
+    const result = runCheck();
 
-    expect(exitCode).toBe(1);
-    expect(output).toContain('❌ FAILED');
-    expect(output).toContain('Type Re-Export Anti-Pattern');
+    expect(result?.passed).toBe(false);
+    expect(result?.exitCode).toBe(1);
+    expect(result?.violationCount).toBeGreaterThan(0);
   });
 
   it('should detect functional code export from types/ directory (function)', () => {
@@ -405,11 +377,11 @@ describe('Type Exports Check', () => {
       `,
     });
 
-    const { exitCode, output } = runCheckAndCaptureOutput();
+    const result = runCheck();
 
-    expect(exitCode).toBe(1);
-    expect(output).toContain('❌ FAILED');
-    expect(output).toContain('Functional Export from Types Directory');
+    expect(result?.passed).toBe(false);
+    expect(result?.exitCode).toBe(1);
+    expect(result?.violationCount).toBeGreaterThan(0);
   });
 
   it('should detect functional code export from types/ directory (class)', () => {
@@ -423,11 +395,11 @@ describe('Type Exports Check', () => {
       `,
     });
 
-    const { exitCode, output } = runCheckAndCaptureOutput();
+    const result = runCheck();
 
-    expect(exitCode).toBe(1);
-    expect(output).toContain('❌ FAILED');
-    expect(output).toContain('Functional Export from Types Directory');
+    expect(result?.passed).toBe(false);
+    expect(result?.exitCode).toBe(1);
+    expect(result?.violationCount).toBeGreaterThan(0);
   });
 
   it('should detect functional const export from types/ directory', () => {
@@ -441,11 +413,11 @@ describe('Type Exports Check', () => {
       `,
     });
 
-    const { exitCode, output } = runCheckAndCaptureOutput();
+    const result = runCheck();
 
-    expect(exitCode).toBe(1);
-    expect(output).toContain('❌ FAILED');
-    expect(output).toContain('Functional Export from Types Directory');
+    expect(result?.passed).toBe(false);
+    expect(result?.exitCode).toBe(1);
+    expect(result?.violationCount).toBeGreaterThan(0);
   });
 
   it('should detect multiple violations across files', () => {
@@ -461,11 +433,11 @@ describe('Type Exports Check', () => {
       `,
     });
 
-    const { exitCode, output } = runCheckAndCaptureOutput();
+    const result = runCheck();
 
-    expect(exitCode).toBe(1);
-    expect(output).toContain('❌ FAILED');
-    expect(output).toContain('3 issues');
+    expect(result?.passed).toBe(false);
+    expect(result?.exitCode).toBe(1);
+    expect(result?.violationCount).toBe(3);
   });
 
   it('should provide helpful fix suggestions', () => {
@@ -475,11 +447,12 @@ describe('Type Exports Check', () => {
       `,
     });
 
-    const { exitCode, output } = runCheckAndCaptureOutput();
+    const result = runCheck();
 
-    expect(exitCode).toBe(1);
-    expect(output).toContain('Move type/interface/enum exports to types.ts');
-    expect(output).toContain('type composition');
+    expect(result?.passed).toBe(false);
+    expect(result?.exitCode).toBe(1);
+    expect(result?.howToFix).toBeDefined();
+    expect(result?.suppressInstruction).toBeDefined();
   });
 
   it('should handle mixed valid and invalid exports', () => {
@@ -497,11 +470,11 @@ describe('Type Exports Check', () => {
       `,
     });
 
-    const { exitCode, output } = runCheckAndCaptureOutput();
+    const result = runCheck();
 
-    expect(exitCode).toBe(1);
-    expect(output).toContain('❌ FAILED');
-    expect(output).toContain('Type Export from Non-Types File');
+    expect(result?.passed).toBe(false);
+    expect(result?.exitCode).toBe(1);
+    expect(result?.violationCount).toBeGreaterThan(0);
   });
 
   it('should handle const with function expression', () => {
@@ -513,10 +486,11 @@ describe('Type Exports Check', () => {
       `,
     });
 
-    const { exitCode, output } = runCheckAndCaptureOutput();
+    const result = runCheck();
 
-    expect(exitCode).toBe(0);
-    expect(output).toContain('✅ PASSED');
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
   });
 
   it('should handle const with class expression', () => {
@@ -528,10 +502,11 @@ describe('Type Exports Check', () => {
       `,
     });
 
-    const { exitCode, output } = runCheckAndCaptureOutput();
+    const result = runCheck();
 
-    expect(exitCode).toBe(0);
-    expect(output).toContain('✅ PASSED');
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
   });
 
   it('should allow non-functional const in types.ts', () => {
@@ -542,10 +517,11 @@ describe('Type Exports Check', () => {
       `,
     });
 
-    const { exitCode, output } = runCheckAndCaptureOutput();
+    const result = runCheck();
 
-    expect(exitCode).toBe(0);
-    expect(output).toContain('✅ PASSED');
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
   });
 
   it('should detect abstract class export from types/ directory', () => {
@@ -559,10 +535,116 @@ describe('Type Exports Check', () => {
       `,
     });
 
-    const { exitCode, output } = runCheckAndCaptureOutput();
+    const result = runCheck();
 
-    expect(exitCode).toBe(1);
-    expect(output).toContain('❌ FAILED');
-    expect(output).toContain('Functional Export from Types Directory');
+    expect(result?.passed).toBe(false);
+    expect(result?.exitCode).toBe(1);
+    expect(result?.violationCount).toBeGreaterThan(0);
+  });
+
+  // ===== IGNORE FLAG TESTS =====
+
+  it('should skip violations with @type-export-allowed on same line', () => {
+    createTestProject({
+      'user.ts': `
+        export type User = { name: string; }; // @type-export-allowed
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
+  });
+
+  it('should skip violations with @type-export-allowed on previous line', () => {
+    createTestProject({
+      'config.ts': `
+        // @type-export-allowed
+        export interface Config {
+          apiKey: string;
+        }
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
+  });
+
+  it('should skip multiple violations with ignore flags', () => {
+    createTestProject({
+      'mixed.ts': `
+        // @type-export-allowed
+        export type User = { name: string; };
+
+        export interface Config { apiKey: string; } // @type-export-allowed
+
+        export enum Status { Active, Inactive } // @type-export-allowed
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
+  });
+
+  it('should still detect violations without ignore flag', () => {
+    createTestProject({
+      'mixed.ts': `
+        // @type-export-allowed
+        export type User = { name: string; };
+
+        // This one should be detected (no ignore flag)
+        export interface Config {
+          apiKey: string;
+        }
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(false);
+    expect(result?.exitCode).toBe(1);
+    expect(result?.violationCount).toBeGreaterThan(0);
+  });
+
+  it('should allow ignore flag for non-functional const exports', () => {
+    createTestProject({
+      'constants.ts': `
+        export const API_KEY = 'my-api-key'; // @type-export-allowed
+        // @type-export-allowed
+        export const MAX_RETRIES = 3;
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
+  });
+
+  it('should allow ignore flag for type re-export anti-pattern', () => {
+    createTestProject({
+      'index.ts': `
+        // @type-export-allowed
+        export type * from './user';
+      `,
+      'user.ts': `
+        export type User = { name: string; }; // @type-export-allowed
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
   });
 });

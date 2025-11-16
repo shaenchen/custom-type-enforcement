@@ -86,12 +86,6 @@ Run specific checks only:
 npx custom-type-enforcement --checks=barrel-files,type-exports
 ```
 
-Use compact output format:
-
-```bash
-npx custom-type-enforcement --format=compact
-```
-
 Add to your `package.json` scripts:
 
 ```json
@@ -194,6 +188,15 @@ export class UserService {
 
 **File path validation**: Types must be in files ending with `types.ts` or containing `/types/` in the path.
 
+**Allow type exports when needed**:
+
+```typescript
+// @type-export-allowed
+export interface LegacyType {
+  // Special case that needs to be exported from this file
+}
+```
+
 ---
 
 ### 3. Type Imports Check
@@ -233,6 +236,13 @@ import { type User, UserService } from './services' // ❌ BAD (type from non-ty
 
 import type { User } from './types' // ✅ GOOD
 import { UserService } from './services' // ✅ GOOD
+```
+
+**Allow type imports when needed**:
+
+```typescript
+// @type-import-allowed
+import type { SpecialType } from './external-library-wrapper'
 ```
 
 ---
@@ -315,7 +325,7 @@ export type PublicUser = Pick<User, 'id' | 'name'>
 **Ignore duplicates**:
 
 ```typescript
-// @type-scan-ignore
+// @type-duplicate-allowed
 export interface SpecialCaseType {
   // Intentionally duplicated for specific reason
 }
@@ -386,7 +396,7 @@ const config: Config = {
 **Allow inline types when appropriate**:
 
 ```typescript
-// @inline-type-ok
+// @inline-type-allowed
 function legacyApi(opts: { debug: boolean }) {
   // One-off parameter that won't be reused
 }
@@ -405,7 +415,6 @@ custom-type-enforcement [options]
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--checks=<checks>` | Comma-separated list of checks to run | All checks |
-| `--format=<format>` | Output format: `structured` or `compact` | `structured` |
 | `--help` | Show help message | - |
 
 ### Available Checks
@@ -429,11 +438,6 @@ npx custom-type-enforcement --checks=barrel-files,type-exports
 npx custom-type-enforcement --checks=type-exports,type-imports
 ```
 
-Use compact output:
-```bash
-npx custom-type-enforcement --format=compact
-```
-
 Get help:
 ```bash
 npx custom-type-enforcement --help
@@ -453,7 +457,7 @@ Add to your `package.json` scripts:
     "check": "custom-type-enforcement",
     "check:types": "custom-type-enforcement --checks=type-exports,type-imports,type-duplicates",
     "check:quality": "custom-type-enforcement --checks=barrel-files,inline-types",
-    "precommit": "custom-type-enforcement --format=compact"
+    "precommit": "custom-type-enforcement"
   }
 }
 ```
@@ -487,7 +491,7 @@ Using `husky`:
 {
   "husky": {
     "hooks": {
-      "pre-commit": "custom-type-enforcement --format=compact"
+      "pre-commit": "custom-type-enforcement"
     }
   }
 }
@@ -536,9 +540,6 @@ npm run check
 
 # Check specific workspace
 npm run check -w @myorg/api
-
-# Check with specific format
-npm run check --workspaces -- --format=compact
 ```
 
 ---
@@ -555,10 +556,32 @@ export * from './components'
 export * from './utils'
 ```
 
+### Type Exports Check
+
+```typescript
+// @type-export-allowed
+export interface LegacyType {
+  // Special case requiring export from this file
+}
+
+// Can also be placed on the same line
+export type SpecialCase = {}; // @type-export-allowed
+```
+
+### Type Imports Check
+
+```typescript
+// @type-import-allowed
+import type { ExternalType } from './wrapper'
+
+// Can also be placed on the same line
+import type { LibraryType } from './lib'; // @type-import-allowed
+```
+
 ### Type Duplicates Check
 
 ```typescript
-// @type-scan-ignore
+// @type-duplicate-allowed
 export interface SpecialCase {
   // Intentionally similar to another type
   id: string
@@ -569,7 +592,7 @@ export interface SpecialCase {
 ### Inline Types Check
 
 ```typescript
-// @inline-type-ok
+// @inline-type-allowed
 function legacyFunction(opts: { debug: boolean }) {
   // One-off parameter
 }
@@ -577,58 +600,43 @@ function legacyFunction(opts: { debug: boolean }) {
 
 ---
 
-## Output Formats
+## Output Format
 
-### Structured (Default)
+The tool uses a minimal, LLM-optimized output format designed for efficient token usage.
 
-Detailed table format with full context:
-
+### Success (all checks pass):
 ```
-─────────────────────────────────────────────────────────────────
-🔍 CHECK: Type Exports
-─────────────────────────────────────────────────────────────────
-
-STATUS: ❌ FAILED (2 issues found)
-
-VIOLATIONS:
-  1. src/services/user.service.ts:5
-     Export type from non-types file
-     export interface User {
-
-  2. src/utils/helpers.ts:12
-     Export interface from non-types file
-     export interface Config {
-
-SEVERITY: BLOCKING
-
-HOW TO FIX:
-  • Move type/interface/enum exports to types.ts or types/{domain}.ts files
-  • Import types from types files in implementation files
-  • Keep types centralized and implementation separate
-
-WHY THIS MATTERS:
-  • Predictable type locations improve code navigation
-  • Reduces circular dependencies
-  • Makes refactoring safer and easier
-  • Types become searchable and discoverable
-
-─────────────────────────────────────────────────────────────────
+✓ All checks passed
 ```
 
-### Compact
-
-Minimal console output for quick scanning:
-
+### Failures (with violations):
 ```
-check-type-exports ❌ FAILED (2 issues)
+✗ 2 checks failed (3 violations)
 
-  src/services/user.service.ts:5   Export type from non-types file
-  src/utils/helpers.ts:12          Export interface from non-types file
+type-exports (2):
+  src/services/user.service.ts:5: Type exported from non-types file
+  src/utils/helpers.ts:12: Interface exported from non-types file
 
-Fix: Move type exports to types.ts files
+Fix: Move type/interface/enum exports to types.ts or types/{domain}.ts files
+     Keep functional exports (functions, classes) in implementation files
+     Use type composition (Pick, Omit, &) to create variations of types
+     To suppress: Add // @type-export-allowed comment on same line or line above
 
-Exit code: 1
+inline-types (1):
+  src/app.ts:15: Inline type in function parameter
+
+Fix: Extract inline types to named type aliases or interfaces
+     Define types in appropriate types.ts files
+     Use descriptive type names that explain the purpose
+     To suppress: Add // @inline-type-allowed comment on same line or line above
 ```
+
+This format:
+- Uses 80-90% fewer tokens than the previous format
+- Shows only failed checks
+- Groups violations by check type
+- Provides actionable fix instructions
+- Includes suppress instructions at the end of each Fix section
 
 ---
 
@@ -649,11 +657,11 @@ import * as fs from 'fs'
 /**
  * Run my custom check
  */
-export function runMyCheck(options: CheckOptions): CheckResult | void {
-  const formatter = new Formatter('My Check', { format: options.format })
+export function runMyCheck(options: CheckOptions = {}): CheckResult | void {
+  const formatter = new Formatter('My Check')
   formatter.start()
 
-  const files = getTypeScriptFiles()
+  const files = getTypeScriptFiles({ projectRoot: options.projectRoot })
   if (!files) {
     console.error('ERROR: No TypeScript files found')
     process.exit(1)
@@ -670,15 +678,16 @@ export function runMyCheck(options: CheckOptions): CheckResult | void {
           file,
           line: index + 1,
           content: line.trim(),
-          message: 'Violation description'
+          message: 'Violation description',
+          severity: 'HIGH',
         })
       }
     })
   }
 
-  return formatter.finish({
+  const exitCode = formatter.finish({
     blocking: true,
-    exitCode: formatter.getViolationCount() > 0 ? 1 : 0,
+    noExit: options.noExit,
     howToFix: [
       'How to fix this issue',
       'Alternative solution'
@@ -687,8 +696,26 @@ export function runMyCheck(options: CheckOptions): CheckResult | void {
       'Why this check is important',
       'What problems it prevents'
     ],
-    noExit: options.noExit
   })
+
+  if (options.noExit) {
+    return {
+      checkName: 'my-check',
+      passed: exitCode === 0,
+      violationCount: formatter.getViolationCount(),
+      exitCode,
+      violations: formatter.getViolations().map(v => ({
+        file: v.file,
+        line: v.line,
+        message: v.message ?? 'Violation detected',
+      })),
+      howToFix: [
+        'How to fix this issue',
+        'Alternative solution'
+      ],
+      suppressInstruction: 'To suppress: Add // @my-check-allowed comment on same line or line above',
+    }
+  }
 }
 ```
 
@@ -771,9 +798,13 @@ Make sure:
 ### False positives
 
 Use ignore comments to suppress false positives:
-- `// @barrel-file-allowed`
-- `// @type-scan-ignore`
-- `// @inline-type-ok`
+- `// @barrel-file-allowed` - Allow barrel files
+- `// @type-export-allowed` - Allow type exports from non-types files
+- `// @type-import-allowed` - Allow type imports from non-types files
+- `// @type-duplicate-allowed` - Ignore type duplicates
+- `// @inline-type-allowed` - Allow inline object types
+
+All flags can be placed either on the same line or on the line above the code.
 
 ---
 

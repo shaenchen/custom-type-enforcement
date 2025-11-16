@@ -59,9 +59,9 @@ describe('Type Imports Check', () => {
         "import type { User } from './types.js';\nconst user: User = { name: 'Alice' };"
       );
 
-      expect(() => {
-        runTypeImportsCheck({ projectRoot: TEST_DIR, format: 'compact' });
-      }).toThrow(); // Should exit with code 0 (success)
+      const result = runTypeImportsCheck({ projectRoot: TEST_DIR, noExit: true });
+      expect(result?.passed).toBe(true);
+      expect(result?.exitCode).toBe(0);
     });
 
     it('should allow type imports from types/{domain}.ts files', () => {
@@ -72,9 +72,9 @@ describe('Type Imports Check', () => {
         "import type { User } from '../types/user.js';\nconst user: User = { name: 'Alice' };"
       );
 
-      expect(() => {
-        runTypeImportsCheck({ projectRoot: TEST_DIR, format: 'compact' });
-      }).toThrow(); // Should exit with code 0 (success)
+      const result = runTypeImportsCheck({ projectRoot: TEST_DIR, noExit: true });
+      expect(result?.passed).toBe(true);
+      expect(result?.exitCode).toBe(0);
     });
 
     it('should allow type imports from external packages', () => {
@@ -84,9 +84,9 @@ describe('Type Imports Check', () => {
         "import type { Request, Response } from 'express';\nimport type { ReactNode } from 'react';"
       );
 
-      expect(() => {
-        runTypeImportsCheck({ projectRoot: TEST_DIR, format: 'compact' });
-      }).toThrow(); // Should exit with code 0 (success)
+      const result = runTypeImportsCheck({ projectRoot: TEST_DIR, noExit: true });
+      expect(result?.passed).toBe(true);
+      expect(result?.exitCode).toBe(0);
     });
 
     it('should allow type imports from scoped external packages', () => {
@@ -96,9 +96,9 @@ describe('Type Imports Check', () => {
         "import type { Config } from '@company/config';\nimport type { Logger } from '@aws-sdk/client-s3';"
       );
 
-      expect(() => {
-        runTypeImportsCheck({ projectRoot: TEST_DIR, format: 'compact' });
-      }).toThrow(); // Should exit with code 0 (success)
+      const result = runTypeImportsCheck({ projectRoot: TEST_DIR, noExit: true });
+      expect(result?.passed).toBe(true);
+      expect(result?.exitCode).toBe(0);
     });
 
     it('should allow inline type imports from types files', () => {
@@ -109,18 +109,18 @@ describe('Type Imports Check', () => {
         "import { type User, getDefaultUser } from './types.js';"
       );
 
-      expect(() => {
-        runTypeImportsCheck({ projectRoot: TEST_DIR, format: 'compact' });
-      }).toThrow(); // Should exit with code 0 (success)
+      const result = runTypeImportsCheck({ projectRoot: TEST_DIR, noExit: true });
+      expect(result?.passed).toBe(true);
+      expect(result?.exitCode).toBe(0);
     });
 
     it('should pass when no type imports exist', () => {
       createTsConfig(['src/**/*.ts']);
       createTestFile('src/app.ts', "import { getUserName } from './user.js';");
 
-      expect(() => {
-        runTypeImportsCheck({ projectRoot: TEST_DIR, format: 'compact' });
-      }).toThrow(); // Should exit with code 0 (success)
+      const result = runTypeImportsCheck({ projectRoot: TEST_DIR, noExit: true });
+      expect(result?.passed).toBe(true);
+      expect(result?.exitCode).toBe(0);
     });
   });
 
@@ -130,9 +130,9 @@ describe('Type Imports Check', () => {
       createTestFile('src/user.ts', 'export interface User { name: string; }');
       createTestFile('src/app.ts', "import type { User } from './user.js';");
 
-      expect(() => {
-        runTypeImportsCheck({ projectRoot: TEST_DIR, format: 'compact' });
-      }).toThrow(); // Should exit with code 1 (failure)
+      const result = runTypeImportsCheck({ projectRoot: TEST_DIR, noExit: true });
+      expect(result?.passed).toBe(false);
+      expect(result?.exitCode).toBe(1);
     });
 
     it('should detect inline type imports from non-types files', () => {
@@ -146,9 +146,9 @@ describe('Type Imports Check', () => {
         "import { type AuthConfig, authenticate } from './services/auth.js';"
       );
 
-      expect(() => {
-        runTypeImportsCheck({ projectRoot: TEST_DIR, format: 'compact' });
-      }).toThrow(); // Should exit with code 1 (failure)
+      const result = runTypeImportsCheck({ projectRoot: TEST_DIR, noExit: true });
+      expect(result?.passed).toBe(false);
+      expect(result?.exitCode).toBe(1);
     });
 
     it('should detect multiple type imports from non-types files', () => {
@@ -162,9 +162,9 @@ describe('Type Imports Check', () => {
         "import type { User, Post } from './models.js';"
       );
 
-      expect(() => {
-        runTypeImportsCheck({ projectRoot: TEST_DIR, format: 'compact' });
-      }).toThrow(); // Should exit with code 1 (failure)
+      const result = runTypeImportsCheck({ projectRoot: TEST_DIR, noExit: true });
+      expect(result?.passed).toBe(false);
+      expect(result?.exitCode).toBe(1);
     });
 
     it('should detect type imports from nested implementation files', () => {
@@ -178,9 +178,9 @@ describe('Type Imports Check', () => {
         "import type { UserService } from './services/user/user-service.js';"
       );
 
-      expect(() => {
-        runTypeImportsCheck({ projectRoot: TEST_DIR, format: 'compact' });
-      }).toThrow(); // Should exit with code 1 (failure)
+      const result = runTypeImportsCheck({ projectRoot: TEST_DIR, noExit: true });
+      expect(result?.passed).toBe(false);
+      expect(result?.exitCode).toBe(1);
     });
 
     it('should detect type imports without .js extension', () => {
@@ -188,9 +188,9 @@ describe('Type Imports Check', () => {
       createTestFile('src/user.ts', 'export interface User { name: string; }');
       createTestFile('src/app.ts', "import type { User } from './user';");
 
-      expect(() => {
-        runTypeImportsCheck({ projectRoot: TEST_DIR, format: 'compact' });
-      }).toThrow(); // Should exit with code 1 (failure)
+      const result = runTypeImportsCheck({ projectRoot: TEST_DIR, noExit: true });
+      expect(result?.passed).toBe(false);
+      expect(result?.exitCode).toBe(1);
     });
   });
 
@@ -204,9 +204,9 @@ describe('Type Imports Check', () => {
         "import type { User } from './types.js';\nimport type { Post } from './models.js';"
       );
 
-      expect(() => {
-        runTypeImportsCheck({ projectRoot: TEST_DIR, format: 'compact' });
-      }).toThrow(); // Should exit with code 1 (one violation for models.js)
+      const result = runTypeImportsCheck({ projectRoot: TEST_DIR, noExit: true });
+      expect(result?.passed).toBe(false);
+      expect(result?.exitCode).toBe(1);
     });
 
     it('should handle import paths ending with /types', () => {
@@ -217,9 +217,9 @@ describe('Type Imports Check', () => {
         "import type { Config } from './shared/types';"
       );
 
-      expect(() => {
-        runTypeImportsCheck({ projectRoot: TEST_DIR, format: 'compact' });
-      }).toThrow(); // Should exit with code 0 (success)
+      const result = runTypeImportsCheck({ projectRoot: TEST_DIR, noExit: true });
+      expect(result?.passed).toBe(true);
+      expect(result?.exitCode).toBe(0);
     });
 
     it('should handle mixed type and regular imports', () => {
@@ -233,9 +233,9 @@ describe('Type Imports Check', () => {
         "import { type Config, getConfig } from './utils.js';"
       );
 
-      expect(() => {
-        runTypeImportsCheck({ projectRoot: TEST_DIR, format: 'compact' });
-      }).toThrow(); // Should exit with code 1 (type import from non-types file)
+      const result = runTypeImportsCheck({ projectRoot: TEST_DIR, noExit: true });
+      expect(result?.passed).toBe(false);
+      expect(result?.exitCode).toBe(1);
     });
 
     it('should handle imports with various whitespace', () => {
@@ -246,9 +246,9 @@ describe('Type Imports Check', () => {
         "import   type   {   User   }   from   './user.js'  ;"
       );
 
-      expect(() => {
-        runTypeImportsCheck({ projectRoot: TEST_DIR, format: 'compact' });
-      }).toThrow(); // Should exit with code 1 (failure)
+      const result = runTypeImportsCheck({ projectRoot: TEST_DIR, noExit: true });
+      expect(result?.passed).toBe(false);
+      expect(result?.exitCode).toBe(1);
     });
 
     it('should handle absolute import paths starting with /', () => {
@@ -256,9 +256,9 @@ describe('Type Imports Check', () => {
       createTestFile('src/user.ts', 'export interface User {}');
       createTestFile('src/app.ts', "import type { User } from '/src/user.js';");
 
-      expect(() => {
-        runTypeImportsCheck({ projectRoot: TEST_DIR, format: 'compact' });
-      }).toThrow(); // Should exit with code 1 (absolute path to non-types file)
+      const result = runTypeImportsCheck({ projectRoot: TEST_DIR, noExit: true });
+      expect(result?.passed).toBe(false);
+      expect(result?.exitCode).toBe(1);
     });
   });
 
@@ -266,18 +266,105 @@ describe('Type Imports Check', () => {
     it('should handle missing tsconfig.json', () => {
       // Don't create tsconfig.json
 
-      expect(() => {
-        runTypeImportsCheck({ projectRoot: TEST_DIR, format: 'compact' });
-      }).toThrow(); // Should exit with code 1
+      const result = runTypeImportsCheck({ projectRoot: TEST_DIR, noExit: true });
+      expect(result?.passed).toBe(false);
+      expect(result?.exitCode).toBe(1);
     });
 
     it('should handle empty project (no TypeScript files)', () => {
       createTsConfig(['src/**/*.ts']);
       // Don't create any TypeScript files
 
-      expect(() => {
-        runTypeImportsCheck({ projectRoot: TEST_DIR, format: 'compact' });
-      }).toThrow(); // Should exit with code 0 (no violations)
+      const result = runTypeImportsCheck({ projectRoot: TEST_DIR, noExit: true });
+      expect(result?.passed).toBe(true);
+      expect(result?.exitCode).toBe(0);
+    });
+  });
+
+  describe('Ignore flag support', () => {
+    it('should skip violations with @type-import-allowed on same line', () => {
+      createTsConfig(['src/**/*.ts']);
+      createTestFile('src/user.ts', 'export interface User { name: string; }');
+      createTestFile(
+        'src/app.ts',
+        "import type { User } from './user.js'; // @type-import-allowed"
+      );
+
+      const result = runTypeImportsCheck({ projectRoot: TEST_DIR, noExit: true });
+      expect(result?.passed).toBe(true);
+      expect(result?.exitCode).toBe(0);
+    });
+
+    it('should skip violations with @type-import-allowed on previous line', () => {
+      createTsConfig(['src/**/*.ts']);
+      createTestFile('src/models.ts', 'export interface Post { title: string; }');
+      createTestFile(
+        'src/app.ts',
+        "// @type-import-allowed\nimport type { Post } from './models.js';"
+      );
+
+      const result = runTypeImportsCheck({ projectRoot: TEST_DIR, noExit: true });
+      expect(result?.passed).toBe(true);
+      expect(result?.exitCode).toBe(0);
+    });
+
+    it('should skip multiple violations with ignore flags', () => {
+      createTsConfig(['src/**/*.ts']);
+      createTestFile('src/user.ts', 'export interface User {}');
+      createTestFile('src/post.ts', 'export interface Post {}');
+      createTestFile(
+        'src/app.ts',
+        "// @type-import-allowed\nimport type { User } from './user.js';\nimport type { Post } from './post.js'; // @type-import-allowed"
+      );
+
+      const result = runTypeImportsCheck({ projectRoot: TEST_DIR, noExit: true });
+      expect(result?.passed).toBe(true);
+      expect(result?.exitCode).toBe(0);
+    });
+
+    it('should still detect violations without ignore flag', () => {
+      createTsConfig(['src/**/*.ts']);
+      createTestFile('src/user.ts', 'export interface User {}');
+      createTestFile('src/post.ts', 'export interface Post {}');
+      createTestFile(
+        'src/app.ts',
+        "// @type-import-allowed\nimport type { User } from './user.js';\nimport type { Post } from './post.js';"
+      );
+
+      const result = runTypeImportsCheck({ projectRoot: TEST_DIR, noExit: true });
+      expect(result?.passed).toBe(false);
+      expect(result?.exitCode).toBe(1);
+    });
+
+    it('should allow ignore flag for inline type imports', () => {
+      createTsConfig(['src/**/*.ts']);
+      createTestFile(
+        'src/utils.ts',
+        'export interface Config {}\nexport function getConfig() {}'
+      );
+      createTestFile(
+        'src/app.ts',
+        "import { type Config, getConfig } from './utils.js'; // @type-import-allowed"
+      );
+
+      const result = runTypeImportsCheck({ projectRoot: TEST_DIR, noExit: true });
+      expect(result?.passed).toBe(true);
+      expect(result?.exitCode).toBe(0);
+    });
+
+    it('should allow ignore flag with mixed imports (some ignored, some not)', () => {
+      createTsConfig(['src/**/*.ts']);
+      createTestFile('src/types.ts', 'export interface User {}');
+      createTestFile('src/models.ts', 'export interface Post {}');
+      createTestFile('src/services.ts', 'export interface Service {}');
+      createTestFile(
+        'src/app.ts',
+        "import type { User } from './types.js';\n// @type-import-allowed\nimport type { Post } from './models.js';\nimport type { Service } from './services.js';"
+      );
+
+      const result = runTypeImportsCheck({ projectRoot: TEST_DIR, noExit: true });
+      expect(result?.passed).toBe(false);
+      expect(result?.exitCode).toBe(1);
     });
   });
 });

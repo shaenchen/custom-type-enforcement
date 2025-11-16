@@ -23,9 +23,7 @@ import type { CheckOptions, CheckResult } from '../types.js';
  * @returns CheckResult if noExit is true, otherwise exits the process
  */
 export function runTypeImportsCheck(options?: CheckOptions): CheckResult | void {
-  const formatter = new Formatter('Type Import Architecture', {
-    format: options?.format ?? 'structured',
-  });
+  const formatter = new Formatter('Type Import Architecture');
 
   formatter.start();
 
@@ -53,6 +51,16 @@ export function runTypeImportsCheck(options?: CheckOptions): CheckResult | void 
         passed: false,
         violationCount: 1,
         exitCode,
+        violations: formatter.getViolations().map(v => ({
+          file: v.file,
+          line: v.line,
+          message: v.message ?? 'Violation detected',
+        })),
+        howToFix: [
+          'Create a tsconfig.json in your project root',
+          'Ensure the file is valid JSON',
+        ],
+        suppressInstruction: 'To suppress: Add // @type-import-allowed comment on same line or line above',
       };
     }
     return;
@@ -67,6 +75,14 @@ export function runTypeImportsCheck(options?: CheckOptions): CheckResult | void 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i] ?? '';
       const lineNumber = i + 1;
+
+      // Get previous line for ignore flag checking
+      const prevLine = i > 0 ? (lines[i - 1] ?? '') : '';
+
+      // Skip if ignore flag is present
+      if (hasIgnoreFlag(line, prevLine)) {
+        continue;
+      }
 
       // Detect type imports:
       // 1. import type { X } syntax
@@ -104,6 +120,7 @@ export function runTypeImportsCheck(options?: CheckOptions): CheckResult | void 
       'Use types/{domain}.ts for domain-specific types',
       'Import types only from types.ts or types/{domain}.ts files',
       'For shared types, export from a centralized types.ts',
+      'Use // @type-import-allowed to suppress false positives (on same line or line above)',
     ] : [],
     whyItMatters: violationCount > 0 ? [
       'Enforces consistent type organization',
@@ -119,8 +136,30 @@ export function runTypeImportsCheck(options?: CheckOptions): CheckResult | void 
       passed: exitCode === 0,
       violationCount: formatter.getViolationCount(),
       exitCode,
+      violations: formatter.getViolations().map(v => ({
+        file: v.file,
+        line: v.line,
+        message: v.message ?? 'Violation detected',
+      })),
+      howToFix: [
+        'Move type definitions to types.ts files',
+        'Use types/{domain}.ts for domain-specific types',
+        'Import types only from types.ts or types/{domain}.ts files',
+        'For shared types, export from a centralized types.ts',
+      ],
+      suppressInstruction: 'To suppress: Add // @type-import-allowed comment on same line or line above',
     };
   }
+}
+
+/**
+ * Check if a line or previous line has the ignore flag
+ */
+function hasIgnoreFlag(line: string, prevLine: string): boolean {
+  return (
+    line.includes('// @type-import-allowed') ||
+    prevLine.includes('// @type-import-allowed')
+  );
 }
 
 /**

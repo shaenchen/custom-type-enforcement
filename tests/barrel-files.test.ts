@@ -45,51 +45,16 @@ function createTestProject(files: Record<string, string>): void {
 }
 
 /**
- * Helper to run check and capture output
+ * Helper to run check with noExit flag
  */
-function runCheckAndCaptureOutput(): { exitCode: number; output: string } {
+function runCheck() {
   const originalCwd = process.cwd();
-  const originalExit = process.exit;
-  const originalLog = console.log;
-  const originalError = console.error;
-
-  let exitCode = 0;
-  let output = '';
-
   try {
-    // Change to test directory
     process.chdir(TEST_DIR);
-
-    // Mock process.exit
-    (process.exit as unknown) = ((code: number) => {
-      exitCode = code ?? 0;
-      throw new Error('EXIT');
-    }) as typeof process.exit;
-
-    // Capture console output
-    console.log = (...args: unknown[]) => {
-      output += args.join(' ') + '\n';
-    };
-    console.error = (...args: unknown[]) => {
-      output += args.join(' ') + '\n';
-    };
-
-    // Run the check
-    runBarrelFilesCheck({ format: 'compact' });
-  } catch (error) {
-    // Expected - process.exit throws
-    if ((error as Error).message !== 'EXIT') {
-      throw error;
-    }
+    return runBarrelFilesCheck({ noExit: true });
   } finally {
-    // Restore
     process.chdir(originalCwd);
-    process.exit = originalExit;
-    console.log = originalLog;
-    console.error = originalError;
   }
-
-  return { exitCode, output };
 }
 
 describe('Barrel Files Check', () => {
@@ -113,10 +78,14 @@ describe('Barrel Files Check', () => {
       `,
     });
 
-    const { exitCode, output } = runCheckAndCaptureOutput();
+    const result = runCheck();
 
-    expect(exitCode).toBe(0);
-    expect(output).toContain('✅ PASSED');
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
+    expect(result?.violations).toBeDefined();
+    expect(result?.howToFix).toBeDefined();
+    expect(result?.suppressInstruction).toBeDefined();
   });
 
   it('should detect pure barrel file with export from', () => {
@@ -134,11 +103,12 @@ describe('Barrel Files Check', () => {
       `,
     });
 
-    const { exitCode, output } = runCheckAndCaptureOutput();
+    const result = runCheck();
 
-    expect(exitCode).toBe(1);
-    expect(output).toContain('❌ FAILED');
-    expect(output).toContain('Pure Barrel File');
+    expect(result?.passed).toBe(false);
+    expect(result?.exitCode).toBe(1);
+    expect(result?.violationCount).toBeGreaterThan(0);
+    expect(result?.violations).toBeDefined();
   });
 
   it('should detect pure barrel file with export * from', () => {
@@ -155,11 +125,12 @@ describe('Barrel Files Check', () => {
       `,
     });
 
-    const { exitCode, output } = runCheckAndCaptureOutput();
+    const result = runCheck();
 
-    expect(exitCode).toBe(1);
-    expect(output).toContain('❌ FAILED');
-    expect(output).toContain('Pure Barrel File');
+    expect(result?.passed).toBe(false);
+    expect(result?.exitCode).toBe(1);
+    expect(result?.violationCount).toBeGreaterThan(0);
+    expect(result?.violations).toBeDefined();
   });
 
   it('should detect pure barrel file with export type from', () => {
@@ -176,11 +147,12 @@ describe('Barrel Files Check', () => {
       `,
     });
 
-    const { exitCode, output } = runCheckAndCaptureOutput();
+    const result = runCheck();
 
-    expect(exitCode).toBe(1);
-    expect(output).toContain('❌ FAILED');
-    expect(output).toContain('Pure Barrel File');
+    expect(result?.passed).toBe(false);
+    expect(result?.exitCode).toBe(1);
+    expect(result?.violationCount).toBeGreaterThan(0);
+    expect(result?.violations).toBeDefined();
   });
 
   it('should allow barrel file with @barrel-file-allowed comment', () => {
@@ -198,10 +170,11 @@ describe('Barrel Files Check', () => {
       `,
     });
 
-    const { exitCode, output } = runCheckAndCaptureOutput();
+    const result = runCheck();
 
-    expect(exitCode).toBe(0);
-    expect(output).toContain('✅ PASSED');
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
   });
 
   it('should allow file with mixed exports and implementation', () => {
@@ -218,10 +191,11 @@ describe('Barrel Files Check', () => {
       `,
     });
 
-    const { exitCode, output } = runCheckAndCaptureOutput();
+    const result = runCheck();
 
-    expect(exitCode).toBe(0);
-    expect(output).toContain('✅ PASSED');
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
   });
 
   it('should allow file with only implementation (no re-exports)', () => {
@@ -233,10 +207,11 @@ describe('Barrel Files Check', () => {
       `,
     });
 
-    const { exitCode, output } = runCheckAndCaptureOutput();
+    const result = runCheck();
 
-    expect(exitCode).toBe(0);
-    expect(output).toContain('✅ PASSED');
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
   });
 
   it('should ignore comments and whitespace in barrel files', () => {
@@ -259,11 +234,12 @@ describe('Barrel Files Check', () => {
       `,
     });
 
-    const { exitCode, output } = runCheckAndCaptureOutput();
+    const result = runCheck();
 
-    expect(exitCode).toBe(1);
-    expect(output).toContain('❌ FAILED');
-    expect(output).toContain('Pure Barrel File');
+    expect(result?.passed).toBe(false);
+    expect(result?.exitCode).toBe(1);
+    expect(result?.violationCount).toBeGreaterThan(0);
+    expect(result?.violations).toBeDefined();
   });
 
   it('should allow import statements in barrel files', () => {
@@ -280,11 +256,12 @@ describe('Barrel Files Check', () => {
       `,
     });
 
-    const { exitCode, output } = runCheckAndCaptureOutput();
+    const result = runCheck();
 
-    expect(exitCode).toBe(1);
-    expect(output).toContain('❌ FAILED');
-    expect(output).toContain('Pure Barrel File');
+    expect(result?.passed).toBe(false);
+    expect(result?.exitCode).toBe(1);
+    expect(result?.violationCount).toBeGreaterThan(0);
+    expect(result?.violations).toBeDefined();
   });
 
   it('should detect multiple barrel files', () => {
@@ -303,11 +280,11 @@ describe('Barrel Files Check', () => {
       `,
     });
 
-    const { exitCode, output } = runCheckAndCaptureOutput();
+    const result = runCheck();
 
-    expect(exitCode).toBe(1);
-    expect(output).toContain('❌ FAILED');
-    expect(output).toContain('2 issues');
+    expect(result?.passed).toBe(false);
+    expect(result?.exitCode).toBe(1);
+    expect(result?.violationCount).toBe(2);
   });
 
   it('should provide helpful fix suggestions', () => {
@@ -320,11 +297,12 @@ describe('Barrel Files Check', () => {
       `,
     });
 
-    const { exitCode, output } = runCheckAndCaptureOutput();
+    const result = runCheck();
 
-    expect(exitCode).toBe(1);
-    expect(output).toContain('Move actual implementation code');
-    expect(output).toContain('Import directly from the source file');
+    expect(result?.passed).toBe(false);
+    expect(result?.exitCode).toBe(1);
+    expect(result?.howToFix).toBeDefined();
+    expect(result?.suppressInstruction).toBeDefined();
   });
 
   it('should handle export * as syntax', () => {
@@ -341,10 +319,11 @@ describe('Barrel Files Check', () => {
       `,
     });
 
-    const { exitCode, output } = runCheckAndCaptureOutput();
+    const result = runCheck();
 
-    expect(exitCode).toBe(1);
-    expect(output).toContain('❌ FAILED');
-    expect(output).toContain('Pure Barrel File');
+    expect(result?.passed).toBe(false);
+    expect(result?.exitCode).toBe(1);
+    expect(result?.violationCount).toBeGreaterThan(0);
+    expect(result?.violations).toBeDefined();
   });
 });

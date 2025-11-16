@@ -127,6 +127,16 @@ function isCommentOrWhitespace(line: string): boolean {
 }
 
 /**
+ * Check if a line or previous line has the ignore flag
+ */
+function hasIgnoreFlag(line: string, prevLine: string): boolean {
+  return (
+    line.includes('// @type-export-allowed') ||
+    prevLine.includes('// @type-export-allowed')
+  );
+}
+
+/**
  * Scan a file for type export violations
  */
 function scanFileForTypeExports(filePath: string): Violation[] {
@@ -141,6 +151,14 @@ function scanFileForTypeExports(filePath: string): Violation[] {
   lines.forEach((line, index) => {
     // Skip comments and whitespace
     if (isCommentOrWhitespace(line)) {
+      return;
+    }
+
+    // Get previous line for ignore flag checking
+    const prevLine = index > 0 ? lines[index - 1] : '';
+
+    // Skip if ignore flag is present
+    if (hasIgnoreFlag(line, prevLine)) {
       return;
     }
 
@@ -256,7 +274,7 @@ function scanFileForTypeExports(filePath: string): Violation[] {
  * @returns CheckResult if noExit is true, otherwise exits the process
  */
 export function runTypeExportsCheck(options: CheckOptions = {}): CheckResult | void {
-  const formatter = new Formatter('Type Export Architecture', { format: options.format });
+  const formatter = new Formatter('Type Export Architecture');
   formatter.start();
 
   // Get all TypeScript files
@@ -284,6 +302,7 @@ export function runTypeExportsCheck(options: CheckOptions = {}): CheckResult | v
       'Use type composition (Pick, Omit, &) to create variations of types',
       'Export only types/interfaces/enums from files in types/ directories',
       'Import directly from types.ts for type definitions',
+      'Use // @type-export-allowed to suppress false positives (on same line or line above)',
     ],
     whyItMatters: [
       'Centralizes type definitions for easier discovery and maintenance',
@@ -300,6 +319,19 @@ export function runTypeExportsCheck(options: CheckOptions = {}): CheckResult | v
       passed: exitCode === 0,
       violationCount: formatter.getViolationCount(),
       exitCode,
+      violations: formatter.getViolations().map(v => ({
+        file: v.file,
+        line: v.line,
+        message: v.message ?? v.type ?? 'Violation detected',
+      })),
+      howToFix: [
+        'Move type/interface/enum exports to types.ts or types/{domain}.ts files',
+        'Keep functional exports (functions, classes) in implementation files',
+        'Use type composition (Pick, Omit, &) to create variations of types',
+        'Export only types/interfaces/enums from files in types/ directories',
+        'Import directly from types.ts for type definitions',
+      ],
+      suppressInstruction: 'To suppress: Add // @type-export-allowed comment on same line or line above',
     };
   }
 }

@@ -13,19 +13,9 @@ export type CheckName =
   | 'inline-types';
 
 /**
- * Output format options for check results
- */
-export type OutputFormat = 'structured' | 'compact';
-
-/**
  * Options passed to check functions
  */
 export interface CheckOptions {
-  /**
-   * Output format to use for displaying results
-   */
-  format?: OutputFormat;
-
   /**
    * Root directory of the project (defaults to process.cwd())
    */
@@ -61,6 +51,25 @@ export interface CheckResult {
    * Exit code to use (0 for pass, 1 for fail)
    */
   exitCode: number;
+
+  /**
+   * Violations found by this check
+   */
+  violations: Array<{
+    file: string;
+    line?: number;
+    message: string;
+  }>;
+
+  /**
+   * How to fix these violations (array of fix steps)
+   */
+  howToFix: string[];
+
+  /**
+   * How to suppress these violations (single instruction line)
+   */
+  suppressInstruction: string;
 }
 
 /**
@@ -76,11 +85,6 @@ export interface ParsedArgs {
    * List of checks to run
    */
   checks: CheckName[];
-
-  /**
-   * Output format
-   */
-  format: OutputFormat;
 
   /**
    * Whether help was requested

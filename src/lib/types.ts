@@ -69,12 +69,10 @@ export interface Warning {
 
 /**
  * Options for the Formatter class
+ * Empty for now - kept for backward compatibility if needed
  */
 export interface FormatterOptions {
-  /**
-   * Output format to use
-   */
-  format?: 'structured' | 'compact';
+  // No options needed for minimal format
 }
 
 /**
