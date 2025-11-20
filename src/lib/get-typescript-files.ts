@@ -8,15 +8,16 @@ import type { TSConfig, GetTypeScriptFilesOptions } from './types.js';
 
 /**
  * Default directories to always exclude
+ * Use ** pattern to match at any level in the directory tree
  */
 const DEFAULT_EXCLUDES = [
-  'node_modules',
-  'dist',
-  'build',
-  '.git',
-  'coverage',
-  '.next',
-  'out',
+  '**/node_modules/**',
+  '**/dist/**',
+  '**/build/**',
+  '**/.git/**',
+  '**/coverage/**',
+  '**/.next/**',
+  '**/out/**',
 ];
 
 /**
