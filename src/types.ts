@@ -26,6 +26,12 @@ export interface CheckOptions {
    * Used by CLI to aggregate results from multiple checks
    */
   noExit?: boolean;
+
+  /**
+   * Additional glob patterns to exclude from file discovery
+   * These are additive to the default excludes (node_modules, dist, etc.)
+   */
+  excludePatterns?: string[];
 }
 
 /**
@@ -90,4 +96,9 @@ export interface ParsedArgs {
    * Whether help was requested
    */
   help: boolean;
+
+  /**
+   * Additional glob patterns to exclude from file discovery
+   */
+  excludePatterns: string[];
 }

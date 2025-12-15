@@ -35,6 +35,28 @@ const EXPORT_BRACES_TYPE_PATTERN = /^\s*export\s+type\s+\{/;     // export type 
 const CONST_EXPORT_PATTERN = /^\s*export\s+const\s+(\w+)\s*[:=]/;
 
 /**
+ * Patterns for runtime schema libraries that should be allowed as const exports
+ * These are functional runtime validators, not type definitions
+ */
+const SCHEMA_LIBRARY_PATTERNS = [
+  // TypeBox patterns: Type.Object(), Type.String(), Type.Array(), etc.
+  /=\s*Type\.\w+\s*\(/,
+  // Zod patterns: z.object(), z.string(), z.enum(), etc.
+  /=\s*z\.\w+\s*\(/,
+];
+
+/**
+ * Patterns for schema initializers on their own line (for multi-line detection)
+ * These patterns don't require the = prefix since they appear on continuation lines
+ */
+const SCHEMA_INITIALIZER_PATTERNS = [
+  // TypeBox: Type.Object(), Type.String(), etc.
+  /^\s*Type\.\w+\s*\(/,
+  // Zod: z.object(), z.string(), etc.
+  /^\s*z\.\w+\s*\(/,
+];
+
+/**
  * Check if a file path is a valid types file
  */
 function isTypesFile(filePath: string): boolean {
@@ -89,6 +111,178 @@ function isConstExportFunctional(line: string, nextLines: string[]): boolean {
       }
       // Stop if we hit a semicolon or another export
       if (nextLines[i].includes(';') || nextLines[i].includes('export')) {
+        break;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Check if a const export is a runtime value (not a type-like constant).
+ * Runtime values include:
+ * - Function call initializers: someFunc(...), obj.method(...)
+ * - new expressions: new SomeClass(...)
+ * - Object/array literals containing non-literal values (identifiers, property access)
+ *
+ * Type-like constants that should still be flagged:
+ * - Pure literal values: 'string', 123, true, null
+ * - Object/array literals containing only literals: { a: 1, b: 'x' }, ['one', 'two']
+ */
+function isRuntimeConstExport(line: string, nextLines: string[]): boolean {
+  // Check for new expression: export const x = new SomeClass(...)
+  if (/export\s+const\s+\w+\s*[:=].*\bnew\s+[A-Z]/.test(line)) {
+    return true;
+  }
+
+  // Check for function/method call initializer: export const x = someFunc(...)
+  // Pattern: = identifier( or = identifier.method(
+  // But NOT arrow functions (handled separately) or pure literals
+  const funcCallMatch = /export\s+const\s+\w+\s*[:=]\s*([a-zA-Z_$][\w$]*(?:\.[a-zA-Z_$][\w$]*)*)\s*\(/.exec(
+    line
+  );
+  if (funcCallMatch) {
+    const identifier = funcCallMatch[1];
+    // Skip if it's a known literal constructor (these create type-like values)
+    const literalConstructors = ['String', 'Number', 'Boolean', 'Array', 'Object'];
+    if (!literalConstructors.includes(identifier)) {
+      // Make sure it's not an arrow function (which would have => later)
+      if (!line.includes('=>')) {
+        // Check next lines for => to rule out multi-line arrow functions
+        let hasArrow = false;
+        for (let i = 0; i < Math.min(5, nextLines.length); i++) {
+          if (nextLines[i].includes('=>')) {
+            hasArrow = true;
+            break;
+          }
+          if (nextLines[i].includes(';') || /^\s*export\s/.test(nextLines[i])) {
+            break;
+          }
+        }
+        if (!hasArrow) {
+          return true;
+        }
+      }
+    }
+  }
+
+  // Check for object/array literals with runtime values
+  // Look for patterns like: = { key: IDENTIFIER } or = { key: obj.prop }
+  // where IDENTIFIER is not a string/number/boolean literal
+
+  // First, check if this is an object or array literal initializer
+  const objectLiteralMatch = /export\s+const\s+\w+\s*[:=]\s*\{/.test(line);
+  const arrayLiteralMatch = /export\s+const\s+\w+\s*[:=]\s*\[/.test(line);
+
+  if (objectLiteralMatch || arrayLiteralMatch) {
+    // Gather all lines until we close the object/array
+    const allLines = [line, ...nextLines.slice(0, 20)];
+    const content = allLines.join('\n');
+
+    // Extract just the object/array content (simplified heuristic)
+    // Look for patterns that indicate runtime values:
+
+    // Pattern 1: Property access like process.env.FOO or config.value
+    if (/[a-zA-Z_$][\w$]*\.[a-zA-Z_$][\w$]*/.test(content)) {
+      // But exclude Type.String(), z.object() etc. which are schema patterns
+      if (
+        !/Type\.\w+\s*\(/.test(content) &&
+        !/z\.\w+\s*\(/.test(content)
+      ) {
+        // Check if the property access is a VALUE (not a key or type annotation)
+        // Look for patterns like: key: identifier.property or : identifier.property,
+        // Handle multiple property accesses like process.env.PORT
+        if (/:\s*[a-zA-Z_$][\w$]*(?:\.[a-zA-Z_$][\w$]*)+[\s,}\]]/.test(content)) {
+          return true;
+        }
+      }
+    }
+
+    // Pattern 2: Uppercase identifiers as values (likely constants/env vars)
+    // Like: { url: REDIS_URL } or { key: API_KEY }
+    // Match: colonOrEquals UPPER_CASE_IDENTIFIER commaOrBraceOrBracket
+    if (/:\s*[A-Z][A-Z0-9_]+[\s,}\]]/.test(content)) {
+      return true;
+    }
+
+    // Pattern 3: Function calls inside object/array (not schema library calls)
+    // Like: { value: getValue() } or { items: fetchItems() }
+    if (/:\s*[a-zA-Z_$][\w$]*\s*\(/.test(content)) {
+      // Exclude Type.* and z.* schema patterns
+      if (!/:\s*Type\.\w+\s*\(/.test(content) && !/:\s*z\.\w+\s*\(/.test(content)) {
+        return true;
+      }
+    }
+
+    // Pattern 4: Template literals (contain runtime expressions)
+    if (/`[^`]*\$\{/.test(content)) {
+      return true;
+    }
+
+    // Pattern 5: Spread operator (indicates dynamic content)
+    if (/\.\.\./.test(content)) {
+      return true;
+    }
+  }
+
+  // Check for multi-line scenarios where the value is on the next line
+  if (/export\s+const\s+\w+\s*[:=]\s*$/.test(line.trimEnd())) {
+    // The value is on the next line(s)
+    for (let i = 0; i < Math.min(3, nextLines.length); i++) {
+      const nextLine = nextLines[i].trim();
+      if (nextLine === '') continue;
+
+      // Check if next line starts with new expression
+      if (/^new\s+[A-Z]/.test(nextLine)) {
+        return true;
+      }
+
+      // Check if next line is a function call
+      if (/^[a-zA-Z_$][\w$]*(?:\.[a-zA-Z_$][\w$]*)*\s*\(/.test(nextLine)) {
+        // Exclude Type.* and z.* schema patterns (handled separately)
+        if (!/^Type\.\w+\s*\(/.test(nextLine) && !/^z\.\w+\s*\(/.test(nextLine)) {
+          return true;
+        }
+      }
+      break;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Check if a const export is a runtime schema (TypeBox, Zod, etc.)
+ * These are functional runtime validators, not type definitions
+ */
+function isSchemaConstExport(line: string, nextLines: string[]): boolean {
+  // Check if the line itself contains a schema pattern (= Type.Object(...) or = z.object(...))
+  if (SCHEMA_LIBRARY_PATTERNS.some((pattern) => pattern.test(line))) {
+    return true;
+  }
+
+  // Check multi-line schema definitions:
+  // export const FooSchema: TSchema =
+  //   Type.Object({
+  //     ...
+  //   });
+  if (/export\s+const\s+\w+\s*[:=]/.test(line)) {
+    // Look ahead to see if we find a schema initializer on its own line
+    for (let i = 0; i < Math.min(5, nextLines.length); i++) {
+      // Check for schema pattern with = prefix (same-line continuation)
+      if (SCHEMA_LIBRARY_PATTERNS.some((pattern) => pattern.test(nextLines[i]))) {
+        return true;
+      }
+      // Check for schema initializer on its own line (multi-line case)
+      if (SCHEMA_INITIALIZER_PATTERNS.some((pattern) => pattern.test(nextLines[i]))) {
+        return true;
+      }
+      // Stop if we hit a semicolon ending a statement or another export
+      if (nextLines[i].includes(';') && !nextLines[i].includes('{')) {
+        break;
+      }
+      if (/^\s*export\s/.test(nextLines[i])) {
         break;
       }
     }
@@ -207,16 +401,26 @@ function scanFileForTypeExports(filePath: string): Violation[] {
     const constMatch = CONST_EXPORT_PATTERN.exec(line);
     if (constMatch && !isValidTypesFile) {
       const nextLines = lines.slice(index + 1);
-      if (!isConstExportFunctional(line, nextLines)) {
-        violations.push({
-          file: filePath,
-          line: index + 1,
-          type: 'Non-Functional Constant Export',
-          severity: 'MEDIUM',
-          content: line.trim(),
-          message: 'Non-functional constants (primitives, objects, arrays) should be exported from types.ts files',
-        });
+      // Skip if it's a functional export (arrow function, class, etc.)
+      if (isConstExportFunctional(line, nextLines)) {
+        return;
       }
+      // Skip if it's a schema library export (TypeBox, Zod, etc.)
+      if (isSchemaConstExport(line, nextLines)) {
+        return;
+      }
+      // Skip if it's a runtime constant (function call, new expression, non-literal object)
+      if (isRuntimeConstExport(line, nextLines)) {
+        return;
+      }
+      violations.push({
+        file: filePath,
+        line: index + 1,
+        type: 'Non-Functional Constant Export',
+        severity: 'MEDIUM',
+        content: line.trim(),
+        message: 'Non-functional constants (primitives, objects, arrays) should be exported from types.ts files',
+      });
     }
 
     // Check for functional code exports from types/ directory
@@ -278,7 +482,10 @@ export function runTypeExportsCheck(options: CheckOptions = {}): CheckResult | v
   formatter.start();
 
   // Get all TypeScript files
-  const files = getTypeScriptFiles({ projectRoot: options.projectRoot });
+  const files = getTypeScriptFiles({
+    projectRoot: options.projectRoot,
+    excludePatterns: options.excludePatterns,
+  });
 
   if (files === null) {
     // This should be handled by the CLI, but just in case

@@ -367,4 +367,133 @@ describe('Type Imports Check', () => {
       expect(result?.exitCode).toBe(1);
     });
   });
+
+  describe('Sibling types file imports (Enhancement #3)', () => {
+    it('should allow type imports between files in the same types/ directory', () => {
+      createTsConfig(['src/**/*.ts']);
+      createTestFile('src/types/metrics.ts', 'export interface Metric { name: string; }');
+      createTestFile(
+        'src/types/charts.ts',
+        "import type { Metric } from './metrics.js';\nexport interface Chart { metric: Metric; }"
+      );
+
+      const result = runTypeImportsCheck({ projectRoot: TEST_DIR, noExit: true });
+      expect(result?.passed).toBe(true);
+      expect(result?.exitCode).toBe(0);
+    });
+
+    it('should allow type imports from types.ts into types/{domain}.ts', () => {
+      createTsConfig(['src/**/*.ts']);
+      createTestFile('src/types.ts', 'export interface BaseEntity { id: number; }');
+      createTestFile(
+        'src/types/user.ts',
+        "import type { BaseEntity } from '../types.js';\nexport interface User extends BaseEntity { name: string; }"
+      );
+
+      const result = runTypeImportsCheck({ projectRoot: TEST_DIR, noExit: true });
+      expect(result?.passed).toBe(true);
+      expect(result?.exitCode).toBe(0);
+    });
+
+    it('should allow type imports from types/{domain}.ts into types.ts', () => {
+      createTsConfig(['src/**/*.ts']);
+      createTestFile('src/types/user.ts', 'export interface User { name: string; }');
+      createTestFile(
+        'src/types.ts',
+        "import type { User } from './types/user.js';\nexport type { User };"
+      );
+
+      const result = runTypeImportsCheck({ projectRoot: TEST_DIR, noExit: true });
+      expect(result?.passed).toBe(true);
+      expect(result?.exitCode).toBe(0);
+    });
+
+    it('should allow multiple sibling imports in one types file', () => {
+      createTsConfig(['src/**/*.ts']);
+      createTestFile('src/types/metrics.ts', 'export interface Metric { name: string; }');
+      createTestFile('src/types/database.ts', 'export interface DatabaseHelper { query: string; }');
+      createTestFile('src/types/schema.ts', 'export interface SchemaAnalysis { tables: string[]; }');
+      createTestFile(
+        'src/types/charts.ts',
+        [
+          "import type { Metric } from './metrics.js';",
+          "import type { DatabaseHelper } from './database.js';",
+          "import type { SchemaAnalysis } from './schema.js';",
+          'export interface Chart { metric: Metric; helper: DatabaseHelper; schema: SchemaAnalysis; }',
+        ].join('\n')
+      );
+
+      const result = runTypeImportsCheck({ projectRoot: TEST_DIR, noExit: true });
+      expect(result?.passed).toBe(true);
+      expect(result?.exitCode).toBe(0);
+    });
+
+    it('should allow type imports between nested types directories', () => {
+      createTsConfig(['src/**/*.ts']);
+      createTestFile('src/shared/types/common.ts', 'export interface Common { id: number; }');
+      createTestFile(
+        'src/domain/types/entity.ts',
+        "import type { Common } from '../../shared/types/common.js';\nexport interface Entity extends Common { name: string; }"
+      );
+
+      const result = runTypeImportsCheck({ projectRoot: TEST_DIR, noExit: true });
+      expect(result?.passed).toBe(true);
+      expect(result?.exitCode).toBe(0);
+    });
+
+    it('should still detect violations when types file imports from non-types file', () => {
+      createTsConfig(['src/**/*.ts']);
+      createTestFile('src/models/user.ts', 'export interface User { name: string; }');
+      createTestFile(
+        'src/types/charts.ts',
+        "import type { User } from '../models/user.js';\nexport interface Chart { user: User; }"
+      );
+
+      const result = runTypeImportsCheck({ projectRoot: TEST_DIR, noExit: true });
+      expect(result?.passed).toBe(false);
+      expect(result?.exitCode).toBe(1);
+    });
+
+    it('should still detect violations when non-types file imports from non-types file', () => {
+      createTsConfig(['src/**/*.ts']);
+      createTestFile('src/models/user.ts', 'export interface User { name: string; }');
+      createTestFile(
+        'src/services/user-service.ts',
+        "import type { User } from '../models/user.js';"
+      );
+
+      const result = runTypeImportsCheck({ projectRoot: TEST_DIR, noExit: true });
+      expect(result?.passed).toBe(false);
+      expect(result?.exitCode).toBe(1);
+    });
+
+    it('should allow type imports without extension between sibling types files', () => {
+      createTsConfig(['src/**/*.ts']);
+      createTestFile('src/types/metrics.ts', 'export interface Metric { name: string; }');
+      createTestFile(
+        'src/types/charts.ts',
+        "import type { Metric } from './metrics';\nexport interface Chart { metric: Metric; }"
+      );
+
+      const result = runTypeImportsCheck({ projectRoot: TEST_DIR, noExit: true });
+      expect(result?.passed).toBe(true);
+      expect(result?.exitCode).toBe(0);
+    });
+
+    it('should allow inline type imports between sibling types files', () => {
+      createTsConfig(['src/**/*.ts']);
+      createTestFile(
+        'src/types/metrics.ts',
+        'export interface Metric { name: string; }\nexport function createMetric(): Metric { return { name: "" }; }'
+      );
+      createTestFile(
+        'src/types/charts.ts',
+        "import { type Metric, createMetric } from './metrics.js';\nexport interface Chart { metric: Metric; }"
+      );
+
+      const result = runTypeImportsCheck({ projectRoot: TEST_DIR, noExit: true });
+      expect(result?.passed).toBe(true);
+      expect(result?.exitCode).toBe(0);
+    });
+  });
 });

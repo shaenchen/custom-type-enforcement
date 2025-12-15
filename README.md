@@ -152,10 +152,12 @@ export * from './components'
 - Export types from `types/{domain}.ts` files
 - Export functions/classes from any file
 - Define types locally (non-exported) in any file
+- Export runtime constants (function calls, `new` expressions, objects with runtime values)
+- Export TypeBox/Zod schemas (runtime validators)
 
 ❌ **Forbidden**:
 - Export types from non-types files
-- Export non-functional constants from non-types files
+- Export type-like constants (pure literals) from non-types files
 - `export type *` pattern (discouraged everywhere)
 
 **Example violations**:
@@ -188,6 +190,39 @@ export class UserService {
 
 **File path validation**: Types must be in files ending with `types.ts` or containing `/types/` in the path.
 
+**Runtime constants are automatically allowed**:
+
+```typescript
+// ✅ GOOD: These are runtime values, not type definitions
+
+// Function call initializers
+export const logger = pino({ level: 'info' });
+export const client = axios.create({ baseURL: 'https://api.example.com' });
+
+// new expressions
+export const service = new MyService();
+export const pool = new Pool({ connectionString: DB_URL });
+
+// Object literals with runtime values (identifiers, property access, function calls)
+export const config = {
+  url: process.env.DATABASE_URL,
+  timeout: getDefaultTimeout(),
+  ...baseConfig,
+};
+
+// TypeBox/Zod schemas (runtime validators)
+export const UserSchema = Type.Object({ name: Type.String() });
+export const EmailSchema = z.string().email();
+```
+
+```typescript
+// ❌ BAD: These are type-like constants (pure literals)
+export const API_KEY = 'my-api-key';        // Primitive literal
+export const MAX_RETRIES = 3;               // Primitive literal
+export const config = { timeout: 5000 };    // Object with only literals
+export const items = ['one', 'two'];        // Array of literals
+```
+
 **Allow type exports when needed**:
 
 ```typescript
@@ -209,6 +244,7 @@ export interface LegacyType {
 - Import types from `types.ts` files
 - Import types from `types/{domain}.ts` files
 - Import types from external packages (npm)
+- Import types between sibling types files (types file → types file)
 
 ❌ **Forbidden**:
 - Import types from implementation files
@@ -236,6 +272,20 @@ import { type User, UserService } from './services' // ❌ BAD (type from non-ty
 
 import type { User } from './types' // ✅ GOOD
 import { UserService } from './services' // ✅ GOOD
+```
+
+**Sibling types file imports are automatically allowed**:
+
+```typescript
+// ✅ GOOD: types/charts.ts importing from types/metrics.ts
+// Both files are in the types/ directory - this is allowed
+import type { Metric, MetricValue } from './metrics';
+import type { ValidationError } from './common';
+
+export interface ChartData {
+  metric: Metric;
+  values: MetricValue[];
+}
 ```
 
 **Allow type imports when needed**:
@@ -415,7 +465,23 @@ custom-type-enforcement [options]
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--checks=<checks>` | Comma-separated list of checks to run | All checks |
+| `--exclude=<patterns>` | Comma-separated glob patterns to exclude files | None |
 | `--help` | Show help message | - |
+
+### Excluding Files
+
+Use `--exclude` to skip files matching glob patterns. This is useful for test files, generated code, or other files that don't need type enforcement:
+
+```bash
+# Exclude test files
+npx custom-type-enforcement --exclude="**/*.test.ts,**/*.spec.ts,**/__tests__/**"
+
+# Exclude generated files
+npx custom-type-enforcement --exclude="**/generated/**,**/*.generated.ts"
+
+# Combine with specific checks
+npx custom-type-enforcement --checks=type-exports --exclude="**/*.test.ts"
+```
 
 ### Available Checks
 

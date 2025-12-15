@@ -359,7 +359,10 @@ export function runTypeDuplicatesCheck(options: CheckOptions = {}): CheckResult 
   formatter.start();
 
   // Get all TypeScript files
-  const files = getTypeScriptFiles({ projectRoot: options.projectRoot });
+  const files = getTypeScriptFiles({
+    projectRoot: options.projectRoot,
+    excludePatterns: options.excludePatterns,
+  });
   if (!files || files.length === 0) {
     const exitCode = formatter.finish({
       blocking: true,

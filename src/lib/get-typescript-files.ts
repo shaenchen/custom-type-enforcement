@@ -43,10 +43,11 @@ export function getTypeScriptFiles(
   // Get include patterns (default to all TypeScript files if not specified)
   const includePatterns = tsconfig.include ?? ['**/*'];
 
-  // Get exclude patterns and merge with defaults
+  // Get exclude patterns and merge with defaults and custom patterns
   const excludePatterns = [
     ...DEFAULT_EXCLUDES,
     ...(tsconfig.exclude ?? []),
+    ...(options.excludePatterns ?? []),
   ];
 
   // Get explicit files list

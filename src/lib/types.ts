@@ -114,6 +114,12 @@ export interface GetTypeScriptFilesOptions {
    * Project root directory (defaults to process.cwd())
    */
   projectRoot?: string;
+
+  /**
+   * Additional glob patterns to exclude from file discovery
+   * These are additive to the default excludes (node_modules, dist, etc.)
+   */
+  excludePatterns?: string[];
 }
 
 /**

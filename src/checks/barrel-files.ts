@@ -124,7 +124,10 @@ export function runBarrelFilesCheck(options: CheckOptions = {}): CheckResult | v
   formatter.start();
 
   // Get all TypeScript files
-  const files = getTypeScriptFiles({ projectRoot: options.projectRoot });
+  const files = getTypeScriptFiles({
+    projectRoot: options.projectRoot,
+    excludePatterns: options.excludePatterns,
+  });
 
   if (files === null) {
     // This should be handled by the CLI, but just in case

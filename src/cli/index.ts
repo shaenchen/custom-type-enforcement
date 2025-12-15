@@ -52,11 +52,18 @@ Options:
                                     type-duplicates, inline-types
                           Default: all checks
 
+  --exclude=<pattern>     Glob pattern to exclude from checking
+                          Can be specified multiple times
+                          Patterns are additive to default excludes
+                          (node_modules, dist, build, .git, coverage, .next, out)
+
   --help                  Show this help message
 
 Examples:
   npx custom-type-enforcement
   npx custom-type-enforcement --checks=barrel-files,type-exports
+  npx custom-type-enforcement --exclude="**/*.test.ts" --exclude="**/*.spec.ts"
+  npx custom-type-enforcement --exclude="**/__tests__/**" --exclude="**/fixtures/**"
 
 Documentation: https://github.com/shaenchen/custom-type-enforcement
 `);
@@ -69,6 +76,7 @@ function parseArgs(): ParsedArgs {
   const args = process.argv.slice(2);
   let checks: CheckName[] = ALL_CHECKS;
   let help = false;
+  const excludePatterns: string[] = [];
 
   for (const arg of args) {
     if (arg === '--help' || arg === '-h') {
@@ -86,6 +94,11 @@ function parseArgs(): ParsedArgs {
       }
 
       checks = requestedChecks;
+    } else if (arg.startsWith('--exclude=')) {
+      const pattern = arg.replace('--exclude=', '');
+      if (pattern) {
+        excludePatterns.push(pattern);
+      }
     } else {
       console.error(`❌ ERROR: Unknown argument: ${arg}\n`);
       console.error('Use --help to see available options\n');
@@ -93,7 +106,7 @@ function parseArgs(): ParsedArgs {
     }
   }
 
-  return { checks, help };
+  return { checks, help, excludePatterns };
 }
 
 /**
@@ -113,13 +126,13 @@ function checkTsConfigExists(): void {
 /**
  * Run checks and aggregate results with minimal LLM-optimized output
  */
-function runChecks(checks: CheckName[]): void {
+function runChecks(checks: CheckName[], excludePatterns: string[]): void {
   const results: CheckResult[] = [];
 
-  // Run each check with noExit option
+  // Run each check with noExit option and exclude patterns
   for (const checkName of checks) {
     const runCheck = CHECK_RUNNERS[checkName];
-    const result = runCheck({ noExit: true });
+    const result = runCheck({ noExit: true, excludePatterns });
 
     if (result) {
       results.push(result);
@@ -180,7 +193,7 @@ function printMinimalOutput(results: CheckResult[]): void {
  * Main CLI function
  */
 function main(): void {
-  const { checks, help } = parseArgs();
+  const { checks, help, excludePatterns } = parseArgs();
 
   if (help) {
     showHelp();
@@ -191,7 +204,7 @@ function main(): void {
   checkTsConfigExists();
 
   // Run checks
-  runChecks(checks);
+  runChecks(checks, excludePatterns);
 }
 
 // Run CLI

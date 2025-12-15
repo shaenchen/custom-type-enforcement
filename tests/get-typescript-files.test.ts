@@ -57,4 +57,123 @@ describe('getTypeScriptFiles', () => {
     expect(result).not.toBeNull();
     expect(Array.isArray(result)).toBe(true);
   });
+
+  describe('excludePatterns', () => {
+    it('should exclude files matching a single pattern', () => {
+      const projectRoot = path.resolve(process.cwd());
+      const resultWithoutExclude = getTypeScriptFiles({ projectRoot });
+      const resultWithExclude = getTypeScriptFiles({
+        projectRoot,
+        excludePatterns: ['**/checks/**'],
+      });
+
+      expect(resultWithoutExclude).not.toBeNull();
+      expect(resultWithExclude).not.toBeNull();
+
+      if (resultWithoutExclude && resultWithExclude) {
+        // Without exclude, should have checks files
+        const hasChecksWithout = resultWithoutExclude.some((file) =>
+          file.includes('/checks/')
+        );
+        expect(hasChecksWithout).toBe(true);
+
+        // With exclude, should not have checks files
+        const hasChecksWith = resultWithExclude.some((file) =>
+          file.includes('/checks/')
+        );
+        expect(hasChecksWith).toBe(false);
+
+        // With exclude should have fewer files
+        expect(resultWithExclude.length).toBeLessThan(resultWithoutExclude.length);
+      }
+    });
+
+    it('should exclude files matching multiple patterns', () => {
+      const projectRoot = path.resolve(process.cwd());
+      const resultWithExclude = getTypeScriptFiles({
+        projectRoot,
+        excludePatterns: ['**/checks/**', '**/lib/**'],
+      });
+
+      expect(resultWithExclude).not.toBeNull();
+
+      if (resultWithExclude) {
+        // Should not have checks files
+        const hasChecks = resultWithExclude.some((file) =>
+          file.includes('/checks/')
+        );
+        expect(hasChecks).toBe(false);
+
+        // Should not have lib files
+        const hasLib = resultWithExclude.some((file) => file.includes('/lib/'));
+        expect(hasLib).toBe(false);
+
+        // Should still have CLI file
+        const hasCli = resultWithExclude.some((file) => file.includes('/cli/'));
+        expect(hasCli).toBe(true);
+      }
+    });
+
+    it('should exclude files matching suffix patterns like *.test.ts', () => {
+      const projectRoot = path.resolve(process.cwd());
+
+      // First verify we would normally include test files if they were in src
+      // Since tests are in tests/ folder which is excluded by tsconfig,
+      // we test with a pattern that matches files we know exist
+      const resultWithExclude = getTypeScriptFiles({
+        projectRoot,
+        excludePatterns: ['**/*-files.ts'],
+      });
+
+      expect(resultWithExclude).not.toBeNull();
+
+      if (resultWithExclude) {
+        // Should not have barrel-files.ts
+        const hasBarrelFiles = resultWithExclude.some((file) =>
+          file.endsWith('barrel-files.ts')
+        );
+        expect(hasBarrelFiles).toBe(false);
+      }
+    });
+
+    it('should be additive to default excludes', () => {
+      const projectRoot = path.resolve(process.cwd());
+      const resultWithExclude = getTypeScriptFiles({
+        projectRoot,
+        excludePatterns: ['**/checks/**'],
+      });
+
+      expect(resultWithExclude).not.toBeNull();
+
+      if (resultWithExclude) {
+        // Default excludes should still work
+        const hasNodeModules = resultWithExclude.some((file) =>
+          file.includes('node_modules')
+        );
+        expect(hasNodeModules).toBe(false);
+
+        const hasDist = resultWithExclude.some((file) =>
+          file.includes('/dist/')
+        );
+        expect(hasDist).toBe(false);
+      }
+    });
+
+    it('should handle empty excludePatterns array', () => {
+      const projectRoot = path.resolve(process.cwd());
+      const resultWithEmpty = getTypeScriptFiles({
+        projectRoot,
+        excludePatterns: [],
+      });
+      const resultWithoutOption = getTypeScriptFiles({ projectRoot });
+
+      expect(resultWithEmpty).not.toBeNull();
+      expect(resultWithoutOption).not.toBeNull();
+
+      if (resultWithEmpty && resultWithoutOption) {
+        // Results should be identical
+        expect(resultWithEmpty.length).toBe(resultWithoutOption.length);
+      }
+    });
+  });
 });

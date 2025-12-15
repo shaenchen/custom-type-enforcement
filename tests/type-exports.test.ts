@@ -647,4 +647,539 @@ describe('Type Exports Check', () => {
     expect(result?.exitCode).toBe(0);
     expect(result?.violationCount).toBe(0);
   });
+
+  // ===== SCHEMA LIBRARY TESTS (TypeBox, Zod) =====
+
+  it('should pass when const export is a TypeBox schema (Type.Object)', () => {
+    createTestProject({
+      'schemas/user.ts': `
+        import { Type } from '@sinclair/typebox';
+
+        export const UserSchema = Type.Object({
+          name: Type.String(),
+          age: Type.Number(),
+        });
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
+  });
+
+  it('should pass when const export is a TypeBox schema (Type.String)', () => {
+    createTestProject({
+      'schemas/common.ts': `
+        import { Type } from '@sinclair/typebox';
+
+        export const UuidParam = Type.String({
+          format: 'uuid',
+          description: 'UUID v4 identifier',
+        });
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
+  });
+
+  it('should pass when const export is a TypeBox schema (Type.Union)', () => {
+    createTestProject({
+      'schemas/status.ts': `
+        import { Type } from '@sinclair/typebox';
+
+        export const StatusSchema = Type.Union([
+          Type.Literal('active'),
+          Type.Literal('inactive'),
+          Type.Literal('pending'),
+        ]);
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
+  });
+
+  it('should pass when const export is a TypeBox schema (Type.Array)', () => {
+    createTestProject({
+      'schemas/items.ts': `
+        import { Type } from '@sinclair/typebox';
+
+        export const ItemsSchema = Type.Array(Type.Object({
+          id: Type.Number(),
+          name: Type.String(),
+        }));
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
+  });
+
+  it('should pass when const export is a Zod schema (z.object)', () => {
+    createTestProject({
+      'schemas/user.ts': `
+        import { z } from 'zod';
+
+        export const UserSchema = z.object({
+          name: z.string(),
+          age: z.number(),
+        });
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
+  });
+
+  it('should pass when const export is a Zod schema (z.enum)', () => {
+    createTestProject({
+      'config/presets.ts': `
+        import { z } from 'zod';
+
+        export const SeveritySchema = z.enum(['low', 'medium', 'high', 'critical']);
+        export const TestTypeSchema = z.enum([
+          'pattern',
+          'trend',
+          'mixture',
+        ]);
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
+  });
+
+  it('should pass when const export is a Zod schema (z.string, z.number)', () => {
+    createTestProject({
+      'validators/common.ts': `
+        import { z } from 'zod';
+
+        export const EmailSchema = z.string().email();
+        export const PositiveNumberSchema = z.number().positive();
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
+  });
+
+  it('should pass with multiple TypeBox schemas in a single file', () => {
+    createTestProject({
+      'schemas/alerts.ts': `
+        import { Type } from '@sinclair/typebox';
+
+        export const ThresholdOperatorSchema = Type.Union([
+          Type.Literal('gt'),
+          Type.Literal('lt'),
+          Type.Literal('eq'),
+        ]);
+
+        export const AlertConditionSchema = Type.Object({
+          type: Type.Union([
+            Type.Literal('threshold'),
+            Type.Literal('spc_rule'),
+          ]),
+          operator: Type.Optional(ThresholdOperatorSchema),
+          value: Type.Optional(Type.Number()),
+        });
+
+        export const AlertResponseSchema = Type.Object({
+          id: Type.Number(),
+          name: Type.String(),
+          condition: AlertConditionSchema,
+        });
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
+  });
+
+  it('should pass when TypeBox schema is on multiple lines with type annotation', () => {
+    createTestProject({
+      'schemas/metrics.ts': `
+        import { Type, TSchema } from '@sinclair/typebox';
+
+        export const MetricResponseSchema: TSchema =
+          Type.Object({
+            id: Type.Number(),
+            name: Type.String(),
+          });
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
+  });
+
+  it('should still detect non-schema const exports alongside schema exports', () => {
+    createTestProject({
+      'schemas/mixed.ts': `
+        import { Type } from '@sinclair/typebox';
+
+        // This is valid - TypeBox schema
+        export const UserSchema = Type.Object({
+          name: Type.String(),
+        });
+
+        // This should be flagged - plain object, not a schema
+        export const defaultUser = {
+          name: 'Anonymous',
+        };
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(false);
+    expect(result?.exitCode).toBe(1);
+    expect(result?.violationCount).toBe(1);
+  });
+
+  // ===== RUNTIME CONSTANT TESTS (Enhancement #5) =====
+
+  it('should pass when const export is initialized with a function call', () => {
+    createTestProject({
+      'logger.ts': `
+        import pino from 'pino';
+
+        export const logger = pino({
+          level: 'info',
+          transport: { target: 'pino-pretty' },
+        });
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
+  });
+
+  it('should pass when const export is initialized with a method call', () => {
+    createTestProject({
+      'cache.ts': `
+        import Redis from 'ioredis';
+
+        export const redisClient = Redis.createClient({
+          host: 'localhost',
+        });
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
+  });
+
+  it('should pass when const export is a new expression', () => {
+    createTestProject({
+      'service.ts': `
+        import { MyService } from './my-service';
+
+        export const service = new MyService();
+        export const anotherService = new AnotherService({ debug: true });
+      `,
+      'my-service.ts': `
+        export class MyService {}
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
+  });
+
+  it('should pass when object literal contains environment variable references', () => {
+    createTestProject({
+      'config.ts': `
+        const REDIS_URL = process.env.REDIS_URL;
+        const API_KEY = process.env.API_KEY;
+
+        export const config = {
+          redis: {
+            url: REDIS_URL,
+            maxRetries: 3,
+          },
+          api: {
+            key: API_KEY,
+          },
+        };
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
+  });
+
+  it('should pass when object literal contains property access', () => {
+    createTestProject({
+      'worker-config.ts': `
+        const baseConfig = { level: 'info' };
+
+        export const workerConfig = {
+          logging: {
+            level: baseConfig.level,
+          },
+        };
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
+  });
+
+  it('should pass when object literal contains function calls', () => {
+    createTestProject({
+      'settings.ts': `
+        function getDefaultTimeout() { return 5000; }
+
+        export const settings = {
+          timeout: getDefaultTimeout(),
+          retries: 3,
+        };
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
+  });
+
+  it('should pass when object literal contains template literals with expressions', () => {
+    createTestProject({
+      'endpoints.ts': `
+        const API_VERSION = 'v1';
+
+        export const endpoints = {
+          users: \`/api/\${API_VERSION}/users\`,
+          items: '/api/items',
+        };
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
+  });
+
+  it('should pass when object literal contains spread operator', () => {
+    createTestProject({
+      'merged-config.ts': `
+        const defaults = { timeout: 5000 };
+
+        export const mergedConfig = {
+          ...defaults,
+          apiKey: 'test',
+        };
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
+  });
+
+  it('should pass when const is initialized with multi-line function call', () => {
+    createTestProject({
+      'database.ts': `
+        import { createPool } from 'mysql2';
+
+        export const pool = createPool(
+          {
+            host: 'localhost',
+            user: 'root',
+          }
+        );
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
+  });
+
+  it('should pass when const is initialized with chained method calls', () => {
+    createTestProject({
+      'client.ts': `
+        import axios from 'axios';
+
+        export const client = axios.create({
+          baseURL: 'https://api.example.com',
+        });
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
+  });
+
+  it('should still detect pure literal object exports (no runtime values)', () => {
+    createTestProject({
+      'constants.ts': `
+        export const config = {
+          apiKey: 'test',
+          timeout: 5000,
+          enabled: true,
+        };
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(false);
+    expect(result?.exitCode).toBe(1);
+    expect(result?.violationCount).toBe(1);
+  });
+
+  it('should still detect pure literal array exports', () => {
+    createTestProject({
+      'data.ts': `
+        export const items = ['one', 'two', 'three'];
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(false);
+    expect(result?.exitCode).toBe(1);
+    expect(result?.violationCount).toBe(1);
+  });
+
+  it('should still detect pure literal primitive exports', () => {
+    createTestProject({
+      'constants.ts': `
+        export const API_KEY = 'my-api-key';
+        export const MAX_RETRIES = 3;
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(false);
+    expect(result?.exitCode).toBe(1);
+    expect(result?.violationCount).toBe(2);
+  });
+
+  it('should handle mixed runtime and literal const exports', () => {
+    createTestProject({
+      'mixed.ts': `
+        import pino from 'pino';
+
+        // Runtime - should pass
+        export const logger = pino({ level: 'info' });
+
+        // Literal - should fail
+        export const MAX_RETRIES = 3;
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(false);
+    expect(result?.exitCode).toBe(1);
+    expect(result?.violationCount).toBe(1);
+  });
+
+  it('should pass when const export uses process.env directly', () => {
+    createTestProject({
+      'env-config.ts': `
+        export const config = {
+          port: process.env.PORT,
+          host: process.env.HOST,
+        };
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
+  });
+
+  it('should pass when value is on next line after equals sign', () => {
+    createTestProject({
+      'multi-line.ts': `
+        export const instance =
+          new MyClass({ option: true });
+
+        class MyClass {
+          constructor(opts: { option: boolean }) {}
+        }
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
+  });
+
+  it('should pass when function call is on next line after equals sign', () => {
+    createTestProject({
+      'deferred-init.ts': `
+        export const client =
+          createClient({ url: 'http://localhost' });
+
+        function createClient(opts: { url: string }) { return opts; }
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
+  });
 });

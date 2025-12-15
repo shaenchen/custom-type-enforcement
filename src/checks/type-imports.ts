@@ -5,6 +5,54 @@ import { Formatter } from '../lib/formatter.js';
 import type { CheckOptions, CheckResult } from '../types.js';
 
 /**
+ * Check if a file path is a valid types file.
+ * A types file is either:
+ * - A file ending with types.ts
+ * - A file inside a types/ directory
+ */
+function isTypesFile(filePath: string): boolean {
+  const normalized = path.normalize(filePath);
+
+  // Check if file ends with types.ts
+  if (normalized.endsWith('types.ts')) {
+    return true;
+  }
+
+  // Check if file is inside a types/ directory
+  if (normalized.includes(`${path.sep}types${path.sep}`)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Resolve a relative import path to determine if the source is a types file.
+ * Returns true if the resolved source path would be a types file.
+ */
+function isSourceTypesFile(importPath: string, importingFilePath: string): boolean {
+  // Normalize the import path (remove .js/.ts extensions)
+  const normalizedImport = importPath.replace(/\.(js|ts)$/, '');
+
+  // Check path patterns that indicate a types file
+  // - ends with /types (e.g., '../shared/types')
+  // - contains /types/ (e.g., './types/user')
+  // - ends with 'types' after normalization (e.g., './types.js' → 'types')
+  if (normalizedImport.endsWith('/types') || normalizedImport.includes('/types/') || normalizedImport.endsWith('types')) {
+    return true;
+  }
+
+  // For relative imports, resolve the full path and check
+  if (importPath.startsWith('.')) {
+    const importingDir = path.dirname(importingFilePath);
+    const resolvedPath = path.resolve(importingDir, normalizedImport + '.ts');
+    return isTypesFile(resolvedPath);
+  }
+
+  return false;
+}
+
+/**
  * Check 4: Type Import Architecture
  *
  * Enforces that type imports only come from types.ts or types/{domain}.ts files.
@@ -27,7 +75,10 @@ export function runTypeImportsCheck(options?: CheckOptions): CheckResult | void 
 
   formatter.start();
 
-  const files = getTypeScriptFiles({ projectRoot: options?.projectRoot });
+  const files = getTypeScriptFiles({
+    projectRoot: options?.projectRoot,
+    excludePatterns: options?.excludePatterns,
+  });
 
   if (!files) {
     formatter.addViolation({
@@ -96,7 +147,7 @@ export function runTypeImportsCheck(options?: CheckOptions): CheckResult | void 
 
       if (importPath) {
         // Check if this is a valid type import source
-        if (!isValidTypeImportSource(importPath)) {
+        if (!isValidTypeImportSource(importPath, file)) {
           violationCount++;
           formatter.addViolation({
             file: path.relative(process.cwd(), file),
@@ -169,11 +220,13 @@ function hasIgnoreFlag(line: string, prevLine: string): boolean {
  * - External packages (don't start with . or /)
  * - Files ending with /types or /types.js
  * - Files containing /types/ in the path
+ * - Sibling types files (when importing file is also a types file)
  *
  * @param importPath - The import path to validate
+ * @param importingFilePath - The absolute path of the file doing the import
  * @returns true if valid, false otherwise
  */
-function isValidTypeImportSource(importPath: string): boolean {
+function isValidTypeImportSource(importPath: string, importingFilePath: string): boolean {
   // External package imports are always allowed (e.g., 'react', '@types/node')
   if (!importPath.startsWith('.') && !importPath.startsWith('/')) {
     return true;
@@ -194,6 +247,12 @@ function isValidTypeImportSource(importPath: string): boolean {
 
   // Check if path ends with types.js or types.ts (already normalized, so just check 'types')
   if (normalizedPath.endsWith('types')) {
+    return true;
+  }
+
+  // Enhancement #3: Allow imports between sibling types files
+  // If the importing file is a types file AND the source is a types file, allow the import
+  if (isTypesFile(importingFilePath) && isSourceTypesFile(importPath, importingFilePath)) {
     return true;
   }
 
