@@ -57,6 +57,12 @@ Options:
                           Patterns are additive to default excludes
                           (node_modules, dist, build, .git, coverage, .next, out)
 
+  --allow-exports=<pattern>
+                          Glob pattern for files where type exports are allowed
+                          Can be specified multiple times
+                          Files matching these patterns skip the type-exports check
+                          Other checks still run on these files
+
   --help                  Show this help message
 
 Examples:
@@ -64,6 +70,7 @@ Examples:
   npx custom-type-enforcement --checks=barrel-files,type-exports
   npx custom-type-enforcement --exclude="**/*.test.ts" --exclude="**/*.spec.ts"
   npx custom-type-enforcement --exclude="**/__tests__/**" --exclude="**/fixtures/**"
+  npx custom-type-enforcement --allow-exports="**/schemas/**" --allow-exports="**/config/**"
 
 Documentation: https://github.com/shaenchen/custom-type-enforcement
 `);
@@ -77,6 +84,7 @@ function parseArgs(): ParsedArgs {
   let checks: CheckName[] = ALL_CHECKS;
   let help = false;
   const excludePatterns: string[] = [];
+  const allowExportsPatterns: string[] = [];
 
   for (const arg of args) {
     if (arg === '--help' || arg === '-h') {
@@ -99,6 +107,11 @@ function parseArgs(): ParsedArgs {
       if (pattern) {
         excludePatterns.push(pattern);
       }
+    } else if (arg.startsWith('--allow-exports=')) {
+      const pattern = arg.replace('--allow-exports=', '');
+      if (pattern) {
+        allowExportsPatterns.push(pattern);
+      }
     } else {
       console.error(`❌ ERROR: Unknown argument: ${arg}\n`);
       console.error('Use --help to see available options\n');
@@ -106,7 +119,7 @@ function parseArgs(): ParsedArgs {
     }
   }
 
-  return { checks, help, excludePatterns };
+  return { checks, help, excludePatterns, allowExportsPatterns };
 }
 
 /**
@@ -126,13 +139,21 @@ function checkTsConfigExists(): void {
 /**
  * Run checks and aggregate results with minimal LLM-optimized output
  */
-function runChecks(checks: CheckName[], excludePatterns: string[]): void {
+function runChecks(
+  checks: CheckName[],
+  excludePatterns: string[],
+  allowExportsPatterns: string[]
+): void {
   const results: CheckResult[] = [];
 
   // Run each check with noExit option and exclude patterns
   for (const checkName of checks) {
     const runCheck = CHECK_RUNNERS[checkName];
-    const result = runCheck({ noExit: true, excludePatterns });
+    const result = runCheck({
+      noExit: true,
+      excludePatterns,
+      allowExportsPatterns,
+    });
 
     if (result) {
       results.push(result);
@@ -193,7 +214,7 @@ function printMinimalOutput(results: CheckResult[]): void {
  * Main CLI function
  */
 function main(): void {
-  const { checks, help, excludePatterns } = parseArgs();
+  const { checks, help, excludePatterns, allowExportsPatterns } = parseArgs();
 
   if (help) {
     showHelp();
@@ -204,7 +225,7 @@ function main(): void {
   checkTsConfigExists();
 
   // Run checks
-  runChecks(checks, excludePatterns);
+  runChecks(checks, excludePatterns, allowExportsPatterns);
 }
 
 // Run CLI

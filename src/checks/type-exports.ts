@@ -5,7 +5,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { Formatter } from '../lib/formatter.js';
-import { getTypeScriptFiles } from '../lib/get-typescript-files.js';
+import { getTypeScriptFiles, globToRegex } from '../lib/get-typescript-files.js';
 import type { Violation } from '../lib/types.js';
 import type { CheckResult, CheckOptions } from '../types.js';
 
@@ -120,6 +120,59 @@ function isConstExportFunctional(line: string, nextLines: string[]): boolean {
 }
 
 /**
+ * Check if an object literal contains only identifier values (function references).
+ * Matches patterns like: { fn1, fn2 } or { fn1: fn1, fn2: fn2 }
+ * Does NOT match if any value is a literal (string, number, boolean, null, array, object).
+ */
+function isObjectWithIdentifierOnlyValues(content: string): boolean {
+  // Extract content between first { and last }
+  const startIdx = content.indexOf('{');
+  const endIdx = content.lastIndexOf('}');
+  if (startIdx === -1 || endIdx === -1 || endIdx <= startIdx) {
+    return false;
+  }
+
+  const objectContent = content.slice(startIdx + 1, endIdx).trim();
+  if (objectContent === '') {
+    return false;
+  }
+
+  // Check for literal values that would disqualify this as identifier-only
+  // String literals: 'value' or "value"
+  if (/['"]/.test(objectContent)) {
+    return false;
+  }
+
+  // Number literals as values: : 123 or : -123 or : 1.5
+  if (/:\s*-?\d/.test(objectContent)) {
+    return false;
+  }
+
+  // Boolean/null literals: : true, : false, : null
+  if (/:\s*(true|false|null)\b/.test(objectContent)) {
+    return false;
+  }
+
+  // Array literals as values: : [
+  if (/:\s*\[/.test(objectContent)) {
+    return false;
+  }
+
+  // Nested object literals as values: : {
+  if (/:\s*\{/.test(objectContent)) {
+    return false;
+  }
+
+  // Now check if we have valid identifier patterns
+  // Shorthand properties: identifier, or identifier}
+  // Explicit properties: key: identifier
+  const hasShorthandProperty = /(?:^|[,{])\s*[a-zA-Z_$][\w$]*\s*(?:[,}]|$)/m.test(objectContent);
+  const hasExplicitIdentifierValue = /:\s*[a-zA-Z_$][\w$]*\s*[,}]/m.test(objectContent);
+
+  return hasShorthandProperty || hasExplicitIdentifierValue;
+}
+
+/**
  * Check if a const export is a runtime value (not a type-like constant).
  * Runtime values include:
  * - Function call initializers: someFunc(...), obj.method(...)
@@ -223,6 +276,15 @@ function isRuntimeConstExport(line: string, nextLines: string[]): boolean {
     // Pattern 5: Spread operator (indicates dynamic content)
     if (/\.\.\./.test(content)) {
       return true;
+    }
+
+    // Pattern 6: Object with identifier-only values (function references)
+    // Like: { fn1, fn2 } or { fn1: fn1, fn2: fn2 }
+    // These are typically test exports or function collections
+    if (objectLiteralMatch) {
+      if (isObjectWithIdentifierOnlyValues(content)) {
+        return true;
+      }
     }
   }
 
@@ -339,8 +401,32 @@ function scanFileForTypeExports(filePath: string): Violation[] {
   const lines = content.split('\n');
   const isValidTypesFile = isTypesFile(filePath);
 
-  // Check if file is in types/ directory but has functional code
+  // Files in types/ directory can export anything - skip all checks for them
   const isInTypesDir = path.normalize(filePath).includes(`${path.sep}types${path.sep}`);
+  if (isInTypesDir) {
+    // Only check for type re-export anti-pattern (discouraged everywhere)
+    lines.forEach((line, index) => {
+      if (isCommentOrWhitespace(line)) {
+        return;
+      }
+      const prevLine = index > 0 ? lines[index - 1] : '';
+      if (hasIgnoreFlag(line, prevLine)) {
+        return;
+      }
+      if (isTypeReExport(line)) {
+        violations.push({
+          file: filePath,
+          line: index + 1,
+          type: 'Type Re-Export Anti-Pattern',
+          severity: 'HIGH',
+          content: line.trim(),
+          message: 'export type * from ... pattern is discouraged',
+          reason: 'Type re-exports make it harder to track type origins and can cause circular dependencies',
+        });
+      }
+    });
+    return violations;
+  }
 
   lines.forEach((line, index) => {
     // Skip comments and whitespace
@@ -422,54 +508,31 @@ function scanFileForTypeExports(filePath: string): Violation[] {
         message: 'Non-functional constants (primitives, objects, arrays) should be exported from types.ts files',
       });
     }
-
-    // Check for functional code exports from types/ directory
-    if (isInTypesDir && isValidTypesFile) {
-      // Check for function exports
-      if (/^\s*export\s+(async\s+)?function\s+\w+/.test(line)) {
-        violations.push({
-          file: filePath,
-          line: index + 1,
-          type: 'Functional Export from Types Directory',
-          severity: 'HIGH',
-          content: line.trim(),
-          message: 'Files in types/ directory should only export types, not functional code',
-        });
-        return;
-      }
-
-      // Check for class exports
-      if (/^\s*export\s+(abstract\s+)?class\s+\w+/.test(line)) {
-        violations.push({
-          file: filePath,
-          line: index + 1,
-          type: 'Functional Export from Types Directory',
-          severity: 'HIGH',
-          content: line.trim(),
-          message: 'Files in types/ directory should only export types, not classes',
-        });
-        return;
-      }
-
-      // Check for functional const exports
-      const constMatch = CONST_EXPORT_PATTERN.exec(line);
-      if (constMatch) {
-        const nextLines = lines.slice(index + 1);
-        if (isConstExportFunctional(line, nextLines)) {
-          violations.push({
-            file: filePath,
-            line: index + 1,
-            type: 'Functional Export from Types Directory',
-            severity: 'HIGH',
-            content: line.trim(),
-            message: 'Files in types/ directory should only export types, not functions',
-          });
-        }
-      }
-    }
   });
 
   return violations;
+}
+
+/**
+ * Check if a file path matches any of the allow-exports patterns
+ * @param filePath - Absolute file path to check
+ * @param patterns - Glob patterns to match against
+ * @param projectRoot - Project root directory for relative path calculation
+ * @returns true if the file matches any pattern
+ */
+function matchesAllowExportsPattern(
+  filePath: string,
+  patterns: string[],
+  projectRoot: string
+): boolean {
+  if (patterns.length === 0) {
+    return false;
+  }
+
+  const relativePath = path.relative(projectRoot, filePath);
+  const allowExportsRegexes = patterns.map((p) => globToRegex(p));
+
+  return allowExportsRegexes.some((regex) => regex.test(relativePath));
 }
 
 /**
@@ -481,9 +544,12 @@ export function runTypeExportsCheck(options: CheckOptions = {}): CheckResult | v
   const formatter = new Formatter('Type Export Architecture');
   formatter.start();
 
+  const projectRoot = options.projectRoot ?? process.cwd();
+  const allowExportsPatterns = options.allowExportsPatterns ?? [];
+
   // Get all TypeScript files
   const files = getTypeScriptFiles({
-    projectRoot: options.projectRoot,
+    projectRoot,
     excludePatterns: options.excludePatterns,
   });
 
@@ -493,8 +559,13 @@ export function runTypeExportsCheck(options: CheckOptions = {}): CheckResult | v
     process.exit(1);
   }
 
-  // Scan each file
+  // Scan each file (skip files matching --allow-exports patterns)
   files.forEach((file) => {
+    // Skip files that match allow-exports patterns
+    if (matchesAllowExportsPattern(file, allowExportsPatterns, projectRoot)) {
+      return;
+    }
+
     const violations = scanFileForTypeExports(file);
     violations.forEach((violation) => formatter.addViolation(violation));
   });
@@ -507,7 +578,7 @@ export function runTypeExportsCheck(options: CheckOptions = {}): CheckResult | v
       'Move type/interface/enum exports to types.ts or types/{domain}.ts files',
       'Keep functional exports (functions, classes) in implementation files',
       'Use type composition (Pick, Omit, &) to create variations of types',
-      'Export only types/interfaces/enums from files in types/ directories',
+      'Files in types/ directories can export anything (types, type guards, constants)',
       'Import directly from types.ts for type definitions',
       'Use // @type-export-allowed to suppress false positives (on same line or line above)',
     ],
@@ -535,7 +606,7 @@ export function runTypeExportsCheck(options: CheckOptions = {}): CheckResult | v
         'Move type/interface/enum exports to types.ts or types/{domain}.ts files',
         'Keep functional exports (functions, classes) in implementation files',
         'Use type composition (Pick, Omit, &) to create variations of types',
-        'Export only types/interfaces/enums from files in types/ directories',
+        'Files in types/ directories can export anything (types, type guards, constants)',
         'Import directly from types.ts for type definitions',
       ],
       suppressInstruction: 'To suppress: Add // @type-export-allowed comment on same line or line above',

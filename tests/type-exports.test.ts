@@ -47,11 +47,11 @@ function createTestProject(files: Record<string, string>): void {
 /**
  * Helper to run check with noExit flag
  */
-function runCheck() {
+function runCheck(options: { allowExportsPatterns?: string[] } = {}) {
   const originalCwd = process.cwd();
   try {
     process.chdir(TEST_DIR);
-    return runTypeExportsCheck({ noExit: true });
+    return runTypeExportsCheck({ noExit: true, ...options });
   } finally {
     process.chdir(originalCwd);
   }
@@ -366,7 +366,7 @@ describe('Type Exports Check', () => {
     expect(result?.violationCount).toBeGreaterThan(0);
   });
 
-  it('should detect functional code export from types/ directory (function)', () => {
+  it('should allow functional code export from types/ directory (function)', () => {
     createTestProject({
       'types/helpers.ts': `
         export type User = { name: string; };
@@ -379,12 +379,12 @@ describe('Type Exports Check', () => {
 
     const result = runCheck();
 
-    expect(result?.passed).toBe(false);
-    expect(result?.exitCode).toBe(1);
-    expect(result?.violationCount).toBeGreaterThan(0);
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
   });
 
-  it('should detect functional code export from types/ directory (class)', () => {
+  it('should allow class export from types/ directory', () => {
     createTestProject({
       'types/models.ts': `
         export type User = { name: string; };
@@ -397,12 +397,12 @@ describe('Type Exports Check', () => {
 
     const result = runCheck();
 
-    expect(result?.passed).toBe(false);
-    expect(result?.exitCode).toBe(1);
-    expect(result?.violationCount).toBeGreaterThan(0);
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
   });
 
-  it('should detect functional const export from types/ directory', () => {
+  it('should allow functional const export from types/ directory', () => {
     createTestProject({
       'types/utils.ts': `
         export type User = { name: string; };
@@ -415,9 +415,9 @@ describe('Type Exports Check', () => {
 
     const result = runCheck();
 
-    expect(result?.passed).toBe(false);
-    expect(result?.exitCode).toBe(1);
-    expect(result?.violationCount).toBeGreaterThan(0);
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
   });
 
   it('should detect multiple violations across files', () => {
@@ -524,7 +524,7 @@ describe('Type Exports Check', () => {
     expect(result?.violationCount).toBe(0);
   });
 
-  it('should detect abstract class export from types/ directory', () => {
+  it('should allow abstract class export from types/ directory', () => {
     createTestProject({
       'types/base.ts': `
         export type User = { name: string; };
@@ -537,9 +537,9 @@ describe('Type Exports Check', () => {
 
     const result = runCheck();
 
-    expect(result?.passed).toBe(false);
-    expect(result?.exitCode).toBe(1);
-    expect(result?.violationCount).toBeGreaterThan(0);
+    expect(result?.passed).toBe(true);
+    expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
   });
 
   // ===== IGNORE FLAG TESTS =====
@@ -1180,6 +1180,372 @@ describe('Type Exports Check', () => {
 
     expect(result?.passed).toBe(true);
     expect(result?.exitCode).toBe(0);
+    expect(result?.violationCount).toBe(0);
+  });
+
+  // ===== ALLOW-EXPORTS FLAG TESTS =====
+
+  it('should pass when file matches --allow-exports pattern (schemas)', () => {
+    createTestProject({
+      'schemas/user.ts': `
+        import { Type, Static } from '@sinclair/typebox';
+
+        export type UserRole = 'admin' | 'user' | 'guest';
+
+        export const UserRoleValues = ['admin', 'user', 'guest'] as const;
+
+        export const UserSchema = Type.Object({
+          id: Type.String(),
+          name: Type.String(),
+        });
+
+        export type User = Static<typeof UserSchema>;
+      `,
+    });
+
+    // Without flag - should fail
+    const resultWithoutFlag = runCheck();
+    expect(resultWithoutFlag?.passed).toBe(false);
+
+    // With flag - should pass
+    const resultWithFlag = runCheck({ allowExportsPatterns: ['schemas/**'] });
+    expect(resultWithFlag?.passed).toBe(true);
+    expect(resultWithFlag?.violationCount).toBe(0);
+  });
+
+  it('should pass when file matches --allow-exports pattern (config)', () => {
+    createTestProject({
+      'config/database.ts': `
+        export interface DatabaseConfig {
+          host: string;
+          port: number;
+        }
+
+        export const databaseConfig: DatabaseConfig = {
+          host: 'localhost',
+          port: 5432,
+        };
+      `,
+    });
+
+    // Without flag - should fail (interface from non-types file)
+    const resultWithoutFlag = runCheck();
+    expect(resultWithoutFlag?.passed).toBe(false);
+
+    // With flag - should pass
+    const resultWithFlag = runCheck({ allowExportsPatterns: ['config/**'] });
+    expect(resultWithFlag?.passed).toBe(true);
+  });
+
+  it('should still fail for files not matching --allow-exports pattern', () => {
+    createTestProject({
+      'schemas/user.ts': `
+        export type User = { name: string; };
+      `,
+      'services/user.service.ts': `
+        export interface User {
+          id: string;
+          name: string;
+        }
+      `,
+    });
+
+    // With schemas pattern - services should still fail
+    const result = runCheck({ allowExportsPatterns: ['schemas/**'] });
+
+    expect(result?.passed).toBe(false);
+    expect(result?.violationCount).toBe(1);
+  });
+
+  it('should support multiple --allow-exports patterns', () => {
+    createTestProject({
+      'schemas/user.ts': `
+        export type User = { name: string; };
+      `,
+      'config/db.ts': `
+        export interface DbConfig { host: string; }
+      `,
+      'services/auth.ts': `
+        export type AuthToken = string;
+      `,
+    });
+
+    // With both patterns - only services should fail
+    const result = runCheck({
+      allowExportsPatterns: ['schemas/**', 'config/**'],
+    });
+
+    expect(result?.passed).toBe(false);
+    expect(result?.violationCount).toBe(1);
+  });
+
+  it('should still run barrel-files check on files matching --allow-exports', () => {
+    // This test verifies that --allow-exports only affects type-exports check
+    // Other checks should still run on these files
+    // (barrel-files check is separate, so this just documents the behavior)
+    createTestProject({
+      'schemas/user.ts': `
+        export type User = { name: string; };
+      `,
+    });
+
+    const result = runCheck({ allowExportsPatterns: ['schemas/**'] });
+
+    // type-exports check should pass due to --allow-exports
+    expect(result?.passed).toBe(true);
+    expect(result?.violationCount).toBe(0);
+  });
+
+  it('should handle nested directory patterns', () => {
+    createTestProject({
+      'src/domain/schemas/user.ts': `
+        export type User = { name: string; };
+      `,
+    });
+
+    // Pattern with ** prefix should match nested directories
+    const result = runCheck({ allowExportsPatterns: ['**/schemas/**'] });
+
+    expect(result?.passed).toBe(true);
+    expect(result?.violationCount).toBe(0);
+  });
+
+  // ===== TYPES/ DIRECTORY RELAXED ENFORCEMENT TESTS =====
+
+  it('should allow any exports from types/ directory (mixed content)', () => {
+    createTestProject({
+      'types/alerts.ts': `
+        export interface ThresholdCondition {
+          threshold: number;
+          operator: 'gt' | 'lt' | 'eq';
+        }
+
+        export interface RuleTriggerCondition {
+          tests: string[];
+        }
+
+        export type AlertCondition = ThresholdCondition | RuleTriggerCondition;
+
+        // Type guards - allowed
+        export function isThresholdCondition(
+          condition: AlertCondition
+        ): condition is ThresholdCondition {
+          return 'threshold' in condition && 'operator' in condition;
+        }
+
+        export function isRuleTriggerCondition(
+          condition: AlertCondition
+        ): condition is RuleTriggerCondition {
+          return 'tests' in condition && Array.isArray(condition.tests);
+        }
+
+        // Constants - allowed
+        export const DEFAULT_TIMEOUT = 5000;
+        export const STATUS_VALUES = ['active', 'inactive'] as const;
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(true);
+    expect(result?.violationCount).toBe(0);
+  });
+
+  it('should allow constants, functions, and classes in types/ directory', () => {
+    createTestProject({
+      'types/full-example.ts': `
+        // Types
+        export interface Config {
+          timeout: number;
+        }
+
+        // Constants (now allowed)
+        export const DEFAULT_TIMEOUT = 5000;
+        export const API_VERSION = 'v1';
+        export const SUPPORTED_FORMATS = ['json', 'xml'];
+
+        // Functions (now allowed)
+        export function createConfig(timeout: number): Config {
+          return { timeout };
+        }
+
+        // Classes (now allowed)
+        export class ConfigManager {
+          constructor(public config: Config) {}
+        }
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(true);
+    expect(result?.violationCount).toBe(0);
+  });
+
+  it('should still flag type re-export anti-pattern in types/ directory', () => {
+    createTestProject({
+      'types/index.ts': `
+        export type * from './user';
+      `,
+      'types/user.ts': `
+        export type User = { name: string; };
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(false);
+    expect(result?.exitCode).toBe(1);
+    expect(result?.violationCount).toBe(1);
+  });
+
+  it('should allow schema library exports in types/ directory', () => {
+    createTestProject({
+      'types/schemas.ts': `
+        import { Type } from '@sinclair/typebox';
+
+        export type User = { name: string; };
+
+        export const UserSchema = Type.Object({
+          name: Type.String(),
+        });
+
+        export const UserRoles = ['admin', 'user', 'guest'] as const;
+      `,
+    });
+
+    const result = runCheck();
+    expect(result?.passed).toBe(true);
+    expect(result?.violationCount).toBe(0);
+  });
+
+  // ===== _testExports PATTERN TESTS =====
+
+  it('should pass when _testExports contains function references (shorthand)', () => {
+    createTestProject({
+      'services/query-executor.ts': `
+        function internalParse(sql: string) {
+          return sql;
+        }
+
+        function internalValidate(query: string) {
+          return true;
+        }
+
+        export function executeQuery(sql: string) {
+          const parsed = internalParse(sql);
+          if (!internalValidate(parsed)) {
+            throw new Error('Invalid query');
+          }
+          return parsed;
+        }
+
+        export const _testExports = {
+          internalParse,
+          internalValidate,
+        };
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(true);
+    expect(result?.violationCount).toBe(0);
+  });
+
+  it('should pass when _testExports uses explicit property syntax', () => {
+    createTestProject({
+      'services/utils.ts': `
+        function helper1() {}
+        function helper2() {}
+
+        export const _testExports = {
+          helper1: helper1,
+          helper2: helper2,
+        };
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(true);
+    expect(result?.violationCount).toBe(0);
+  });
+
+  it('should pass when object contains nested identifier reference', () => {
+    createTestProject({
+      'services/parser.ts': `
+        const parse = {
+          json: (s: string) => JSON.parse(s),
+          xml: (s: string) => s,
+        };
+
+        export const _testExports = {
+          parse,
+        };
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(true);
+    expect(result?.violationCount).toBe(0);
+  });
+
+  it('should still fail when object contains mixed values (identifier + literal)', () => {
+    createTestProject({
+      'services/config.ts': `
+        function getDefaultTimeout() {
+          return 5000;
+        }
+
+        export const _config = {
+          getDefaultTimeout,
+          maxRetries: 3,
+        };
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(false);
+    expect(result?.violationCount).toBe(1);
+  });
+
+  it('should still fail when object contains only literals', () => {
+    createTestProject({
+      'config.ts': `
+        export const config = {
+          apiKey: 'test',
+          timeout: 5000,
+        };
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(false);
+    expect(result?.violationCount).toBe(1);
+  });
+
+  it('should pass when object has single identifier value', () => {
+    createTestProject({
+      'services/singleton.ts': `
+        function createInstance() {
+          return { id: 1 };
+        }
+
+        const instance = createInstance();
+
+        export const _testExports = {
+          instance,
+        };
+      `,
+    });
+
+    const result = runCheck();
+
+    expect(result?.passed).toBe(true);
     expect(result?.violationCount).toBe(0);
   });
 });

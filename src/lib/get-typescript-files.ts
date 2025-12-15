@@ -143,7 +143,7 @@ function findFilesMatchingPattern(
  * - * (matches any characters except /)
  * - Literal characters
  */
-function globToRegex(pattern: string): RegExp {
+export function globToRegex(pattern: string): RegExp {
   // Escape special regex characters except * and /
   let regexPattern = pattern
     .replace(/[.+?^${}()|[\]\\]/g, '\\$&');

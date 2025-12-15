@@ -32,6 +32,13 @@ export interface CheckOptions {
    * These are additive to the default excludes (node_modules, dist, etc.)
    */
   excludePatterns?: string[];
+
+  /**
+   * Glob patterns for files where type exports are allowed.
+   * Files matching these patterns skip the type-exports check entirely.
+   * Other checks (barrel-files, type-imports, etc.) still run on these files.
+   */
+  allowExportsPatterns?: string[];
 }
 
 /**
@@ -101,4 +108,9 @@ export interface ParsedArgs {
    * Additional glob patterns to exclude from file discovery
    */
   excludePatterns: string[];
+
+  /**
+   * Glob patterns for files where type exports are allowed
+   */
+  allowExportsPatterns: string[];
 }

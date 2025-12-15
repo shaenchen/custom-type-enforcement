@@ -1,6 +1,6 @@
 {
   "name": "@shaenchen/custom-type-enforcement",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Enforce TypeScript type architecture and code quality rules",
   "main": "dist/cli/index.js",
   "bin": {

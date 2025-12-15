@@ -149,7 +149,7 @@ export * from './components'
 
 ✅ **Allowed**:
 - Export types from `types.ts` files
-- Export types from `types/{domain}.ts` files
+- Export types from `types/{domain}.ts` files (can export **anything**: types, functions, constants, classes)
 - Export functions/classes from any file
 - Define types locally (non-exported) in any file
 - Export runtime constants (function calls, `new` expressions, objects with runtime values)
@@ -158,7 +158,7 @@ export * from './components'
 ❌ **Forbidden**:
 - Export types from non-types files
 - Export type-like constants (pure literals) from non-types files
-- `export type *` pattern (discouraged everywhere)
+- `export type *` pattern (discouraged everywhere, including in types/ directories)
 
 **Example violations**:
 
@@ -189,6 +189,34 @@ export class UserService {
 ```
 
 **File path validation**: Types must be in files ending with `types.ts` or containing `/types/` in the path.
+
+**Types/ directories allow anything**: Files in `types/` directories can export anything—types, type guards, helper functions, constants, and classes. This pragmatic approach recognizes that:
+- Type guards naturally co-locate with their discriminated union types
+- `as const` arrays are often used with Zod schemas
+- Default configuration objects belong with their type definitions
+
+```typescript
+// ✅ GOOD: types/alerts.ts - all exports allowed
+export interface ThresholdCondition {
+  threshold: number;
+  operator: 'gt' | 'lt' | 'eq';
+}
+
+export interface RuleCondition {
+  rules: string[];
+}
+
+export type AlertCondition = ThresholdCondition | RuleCondition;
+
+// Type guards - allowed in types/ directory
+export function isThresholdCondition(c: AlertCondition): c is ThresholdCondition {
+  return 'threshold' in c;
+}
+
+// Constants - allowed in types/ directory
+export const ALERT_TYPES = ['threshold', 'rule'] as const;
+export const DEFAULT_TIMEOUT = 5000;
+```
 
 **Runtime constants are automatically allowed**:
 
